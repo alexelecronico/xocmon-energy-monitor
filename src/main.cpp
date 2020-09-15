@@ -85,6 +85,7 @@ long timercurrentTime;
 float counterstatus=0;
 int intcounterstatus=0;
 
+
 float flowtemp1;
 float flowtotal; //para guardar en memoria usar: RTC_DATA_ATTR , por ejemplo RTC_DATA_ATTR int bootCount = 0;
 float flowacum;
