@@ -6,11 +6,9 @@
 //String GOOGLE_SCRIPT_ID = "AKfycbyZuLmLX83geo0c0nQnzlz3w-uQtoSzJZZNBtQ7vGNWw62HEhAx"; // pupu2 Replace by your GAS service id
 //String GOOGLE_SCRIPT_ID = "AKfycbwKJ4eFVA7c7tfNMuVmW7criLQvSzuioWzPl05NjJLABL6l0W79"; // m001 Replace by your GAS service id
 //String GOOGLE_SCRIPT_ID = "AKfycbwvHLFtKlmxn1JLKSxQUXQtdGqMFZi6u8bgFvPCfZ_WAnRFYIVL"; // pupu Replace by your GAS service id
-String GOOGLE_SCRIPT_ID = "AKfycbydrQCU67gRJiyRCfhZBjQmjzSCFpmc5nGzjDBE"; //03
+String GOOGLE_SCRIPT_ID = "AKfycbydrQCU67gRJiyRCfhZBjQmjzSCFpmc5nGzjDBE"; //google sheet 03
 
 // Default Wifi credentials
-//const char *WIFI_SSID = "AGUACATE";
-//const char *WIFI_PASSWORD = "chipotle";
 //const char * WIFI_SSID = "FLYX";
 //const char * WIFI_PASSWORD = "infinito";
 const char *WIFI_SSID = "Mm";
