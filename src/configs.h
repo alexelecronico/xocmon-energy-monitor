@@ -3,12 +3,19 @@
 
 //google publish
  #include <HTTPClient.h>
-//String GOOGLE_SCRIPT_ID = "AKfycbyZuLmLX83geo0c0nQnzlz3w-uQtoSzJZZNBtQ7vGNWw62HEhAx"; // pupu2 Replace by your GAS service id
+String GOOGLE_SCRIPT_ID = "AKfycbyZuLmLX83geo0c0nQnzlz3w-uQtoSzJZZNBtQ7vGNWw62HEhAx"; // pupu2 Replace by your GAS service id
 //String GOOGLE_SCRIPT_ID = "AKfycbwKJ4eFVA7c7tfNMuVmW7criLQvSzuioWzPl05NjJLABL6l0W79"; // m001 Replace by your GAS service id
 //String GOOGLE_SCRIPT_ID = "AKfycbwvHLFtKlmxn1JLKSxQUXQtdGqMFZi6u8bgFvPCfZ_WAnRFYIVL"; // pupu Replace by your GAS service id
-String GOOGLE_SCRIPT_ID = "AKfycbydrQCU67gRJiyRCfhZBjQmjzSCFpmc5nGzjDBE"; //google sheet 03
+//String GOOGLE_SCRIPT_ID = "AKfycbydrQCU67gRJiyRCfhZBjQmjzSCFpmc5nGzjDBE"; //google sheet 03
 
-// Default Wifi credentials
+const int M3TRid = 2;
+
+
+
+
+
+//////////////////// Default Wifi credentials ///////////////////////////
+
 //const char * WIFI_SSID = "FLYX";
 //const char * WIFI_PASSWORD = "infinito";
 const char *WIFI_SSID = "Mm";
@@ -16,7 +23,7 @@ const char *WIFI_PASSWORD = "12481632";
 //const char * WIFI_SSID = "AGUACATE";
 //const char * WIFI_PASSWORD = "chipotle";
 
-const int M3TRid = 3;
+
 
 
 // MQTT information4
@@ -35,22 +42,5 @@ const int M3TRid = 3;
 #define BAND 915E6
 #define SPREADING_FACTOR 12
 #define BAND_WINDTH 500E3
-
-
-
-
-
-// #define AWS_IOT_TOPIC "$aws/things/" DEVICE_NAME
-// const char *WIFI_SSID = "iflyx";
-// const char *WIFI_PASSWORD = "12481632";
-
-// const char *WIFI_SSID = "iflyx";
-// const char *WIFI_PASSWORD = "12481632";
-
-// const char *WIFI_SSID = "FLYX";
-// const char *WIFI_PASSWORD = "infinito";
-
-// const char *WIFI_SSID = "INFINITUM0BEE_2.4_2";
-// const char *WIFI_PASSWORD = "superandy2018";
 
 #endif

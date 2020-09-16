@@ -3,6 +3,8 @@
 // https://docs.platformio.org/en/latest/platforms/espressif32.html#cpu-frequency
 // https://docs.platformio.org/en/latest/integration/ide/vscode.html#ide-vscode
 
+//watchdog: https://iotassistant.io/esp32/enable-hardware-watchdog-timer-esp32-arduino-ide/
+
 // SELECT * FROM 'AGRO-PRODUCTION-IoTTopic01'
 #include <WiFiClientSecure.h>
 #include <MQTTClient.h>
@@ -15,7 +17,7 @@
 #include <AutoConnect.h>
 #include <WebServer.h>
 #include <ESP32Ping.h>  //to check if there is internet, not only wifi
-#include "esp_system.h"
+#include <esp_task_wdt.h>
 
 
 WiFiClientSecure client;
@@ -245,7 +247,7 @@ void connectToWiFi()
     int retries = 30;
     while (WiFi.status() != WL_CONNECTED && retries > 1)
     {
-      
+      esp_task_wdt_reset();
       delay(1000);
       Serial.print(retries);
       retries--;
@@ -385,6 +387,7 @@ void buttoncheck() //if pushbutton pressed for more than x times delay(millis), 
     Serial.println("button ");
     while (d < 30) //x times
     {
+      esp_task_wdt_reset();
       if (digitalRead(bot) == LOW)
       {
         Serial.print("! ");
@@ -426,6 +429,7 @@ void buttoncheck() //if pushbutton pressed for more than x times delay(millis), 
       d = 0;
       while (d < 100) //x times
       {
+        esp_task_wdt_reset();
         if (digitalRead(bot) == LOW)
         {
           Serial.print("! ");
@@ -664,6 +668,7 @@ void flowread(){
     for(int i=0;i<multiplos;i++){
         if (publishnow==0){i=multiplos;Serial.println("i=multiplos!!!!! publica ya!");}
         readshort(); 
+        esp_task_wdt_reset();
         Serial.print(" ");Serial.print(i);Serial.print("/");Serial.print(multiplos);Serial.print(" ");
         
         //if(i==10 || i==60 || i==120 || i==180 || i==240 || i==300 || i==360 || i==420|| i==480 || i==540 || i==600 || i==660 || i==720 || i==780 || i==840){
@@ -702,8 +707,11 @@ void sendData(String params)
   Serial.print("Making a request");
   http.begin(url, root_ca); //Specify the URL and certificate
   Serial.print("http.get:");
+  esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
+  //esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
   httpCode = http.GET();
   Serial.println("A VER");
+  esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
   http.end();
   Serial.println("end");
   Serial.println(httpCode);
@@ -835,7 +843,10 @@ void Task2code( void * pvParameters ){
   Serial.print("Task2 running on core ");
   Serial.println(xPortGetCoreID());
   delay(2000);
-
+  Serial.println("Configuring WDT core 1...");
+  esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
+  esp_task_wdt_add(NULL); //add current thread to WDT watch
+  esp_task_wdt_reset();
   for(;;){
     Serial.println("----------core 1-----------");
 
@@ -845,6 +856,7 @@ void Task2code( void * pvParameters ){
     flowread();
     empaquetador();
     buttoncheck();
+    esp_task_wdt_reset();
     
   }
 }
@@ -958,6 +970,10 @@ void setup()                                                                    
   digitalWrite(ledred,HIGH);
   digitalWrite(ledgreen,LOW);
   delay(3000);
+  Serial.println("Configuring WDT core 0...");
+  esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
+  esp_task_wdt_add(NULL); //add current thread to WDT watch
+
 
 /*
   #define lipocheck 36  //GPIO36 analog pin para medir voltaje de bateria 
@@ -993,6 +1009,7 @@ void setup()                                                                    
 
   connectToWiFi();
   delay(1000);
+  esp_task_wdt_reset();
 
   timeClient.begin();
   timeClient.setTimeOffset(0);
@@ -1005,7 +1022,7 @@ void setup()                                                                    
   //initLora();
   delay(500);
 
-  
+  esp_task_wdt_reset();
 
 } //end setup
 
@@ -1041,7 +1058,7 @@ void loop()
       portal.config(config);
       Serial.println("portal begin loop");
       //Portal.begin();
-
+      esp_task_wdt_init(65, true); //enable panic so ESP32 restarts
       acEnable = portal.begin();
       if (!acEnable)
       {
@@ -1050,6 +1067,7 @@ void loop()
         delay(100);
         connectToWiFi();
       }
+      esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
     }
     i++;
     delay(100);
@@ -1062,9 +1080,12 @@ void loop()
   if (WiFi.status() == WL_CONNECTED && millis() > zeit2)
   {
     Serial.print("pinging.. ");
-    if (Ping.ping("www.google.com",2) == 1) //bool ret = Ping.ping("www.google.com",10); //repeticiones
-    {
+    esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
+    if (Ping.ping("www.google.com",1) == 1) //bool ret = Ping.ping("www.google.com",10); //repeticiones
+    { 
+      esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
       avg_time_ms = Ping.averageTime();
+      esp_task_wdt_reset();
       Serial.print("ping: ");
       Serial.println(avg_time_ms);
       zeit2 = 10000 + millis();
@@ -1082,9 +1103,11 @@ void loop()
         Serial.print("updatecurrentTime.. ");
         updatecurrentTime();
       }
+      
     }
     else
     {
+      esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
       avg_time_ms = 1001;
       flagonline = 0;
       digitalWrite(ledred, HIGH);
@@ -1103,6 +1126,7 @@ void loop()
     Serial.println("portal handleClient");
     portal.handleClient();
   }
+  esp_task_wdt_reset();
   delay(100);
 } //end loop
 
