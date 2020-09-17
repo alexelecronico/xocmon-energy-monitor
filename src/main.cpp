@@ -17,7 +17,7 @@
 #include <AutoConnect.h>
 #include <WebServer.h>
 #include <ESP32Ping.h>  //to check if there is internet, not only wifi
-#include <esp_task_wdt.h>
+#include <esp_task_wdt.h>   //watchdog
 
 
 WiFiClientSecure client;
@@ -1136,11 +1136,5 @@ void loop()
 
 //problema1: publicar tarda mas de 8 segundos por mensaje...
 
-//revisar por que manda datos del backup que tiene contador totalmente fuera del rango
-//cuando esta sin luz sleep ESP y que se despuerte por: 1 flow, 2 bot, 3 tiempo
 
 
-//looppublisher necesita arreglar lo de 0++ y x++ porque es un desmadere
-//por aguna razon deja de mandar hits pero no esta trabado, se necesita buscar mas a fondo
-
-//ahora si se trBO LA PENDEJADA
