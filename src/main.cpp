@@ -10,7 +10,7 @@
 //#include <MQTTClient.h>
 //#include <NTPClient.h>
 //#include "WiFi.h"
-#include <WiFiUdp.h>
+//#include <WiFiUdp.h>
 //#include <SPI.h>
 //#include <LoRa.h>
 /////#include <time.h>
@@ -36,12 +36,16 @@
 #endif
 #include <time.h>
 #include <AutoConnect.h>
-//#include <AutoConnectDefs.h>
-//#define AC_DEBUG
+#include <OTAClient.h>
+
+
 
 #include <ESP32Ping.h>  //to check if there is internet, not only wifi
 #include <esp_task_wdt.h>   //watchdog
 
+#include <EEPROM.h>   //para guardar la fecha si se traba
+#define EEPROM_SIZE 10
+byte timebackup=0;
 
 
 WiFiUDP ntpUDP;
@@ -215,6 +219,7 @@ float vbat=0;
 #define ledgreen 33
 #define ledred 32
 #define bot 26
+#define railEnable 25
 
 int flagnohayluz;
 int publishnow=0;
@@ -248,6 +253,8 @@ int x=0;
 long zeit2=0;
 int avg_time_ms;
 
+unsigned long timer = 0; //para hacer currentTime backup en eeprom cada hora
+
 
 int i=0;//temp
 bool acEnable;
@@ -274,43 +281,105 @@ const float A[10][3]=       { //sensor1, input , output           sensor1 = DN20
 
 void updatecurrentTime()
 {
+
+Serial.println("updatecurrentTime::::::");
+
+//EEPROM.read(0);//leer
+
+//EEPROM.write(0, ledState);
+//EEPROM.commit();
+
+  Serial.print("timebackup=");Serial.println(timebackup);
+  Serial.print("currentTime=");Serial.println(currentTime);
+
+
+  timeClient.begin();
+  timeClient.setTimeOffset(0);
+  timeClient.update();
   currentTime = timeClient.getEpochTime();
-  if (currentTime < 1500000000)
-  {
-    timeClient.begin();
-    timeClient.setTimeOffset(0);
-    timeClient.update();
-  }
+  timeClient.end();
+
+  // if (currentTime < 1600000000)
+  // {
+  //   timeClient.begin();
+  //   timeClient.setTimeOffset(0);
+  //   timeClient.update();
+  //   timeClient.end();
+  // }
 
   Serial.print("currentTime: Time.now: ");
   Serial.println(currentTime); //rtc.nowEpoch();
-  if (1588379474 < currentTime && currentTime < 2000000000)
+  if (1600000000 < currentTime && currentTime < 2000000000)
   {
     backupcurrentTime = currentTime;
     timercurrentTime = millis();
   }
   else
   {
+    String currentTimeStr;
     currentTime = backupcurrentTime + (millis() - timercurrentTime) / 1000;
+    if (currentTime < 1600000000)
+    {
+      String readbackup = "";
+      for (int i = currentTimeStr.length(); i > 0; i--)
+      { //imprime lo que guardo para confirmar
+        
+        Serial.print(EEPROM.read(i));
+        readbackup = readbackup + EEPROM.read(i); //leer
+      }
+      unsigned long dfdfa = currentTimeStr.substring(0).toInt();
+      Serial.print("recovered: ");
+      Serial.println(dfdfa);
+      currentTime=dfdfa;
+      timebackup = 0;
+      readbackup = "";
+    }
   }
+
+  if(timebackup==1 && currentTime > 1600000000){
+    Serial.print("backing up currentTime: ");Serial.println(currentTime);
+    String currentTimeStr = String(currentTime);
+    for (int i=currentTimeStr.length();i>0;i--){  //length deberia ser siempre 10 (por ej 1.600.000.000)
+      byte x = currentTimeStr.substring(i, i).toInt();
+      EEPROM.write(i, x);
+      EEPROM.commit();
+      //Serial.print(i);
+    }
+    String readbackup="";
+    for (int i=currentTimeStr.length();i>0;i--){   //imprime lo que guardo para confirmar
+      EEPROM.read(i);
+      readbackup = readbackup + EEPROM.read(i);       //leer
+    }
+    unsigned long dfdfa = currentTimeStr.substring(0).toInt();
+    Serial.print("saved: ");Serial.println(dfdfa);
+    timebackup=0;
+    readbackup="";
+  }
+  else
+  {
+    //Serial.println("timebackup=0 or currentTime is invalid");
+    timebackup=0;
+  }
+  
+
 }
 
 
 void APmode(){
 
-  disableCore0WDT();
+  //disableCore0WDT();
   Serial.println("AP mode");
   Serial.println("Creating portal and trying to connect...");
 
   Config.immediateStart = true;
   Config.autoReconnect = true;
-  Config.hostName = "M3TR";
+  Config.hostName = "M3TR " + String(M3TRid);
   Config.portalTimeout = 60000;
   Config.apid = "M3TR " + String(M3TRid);
   //Config.apip = 192.168.0.1;
   Config.retainPortal = false;     //testito
   Portal.config(Config);
-  esp_task_wdt_reset();
+  //esp_task_wdt_reset();
 
   // Establish a connection with an autoReconnect option.
   bool acEnable;
@@ -327,12 +396,12 @@ void APmode(){
     Serial.println("portal eeeeeeeeeeeeeeennnnnnnnnnnnnnnnddddddddddddddd");
     //WiFi.disconnect();
     delay(100);
-    esp_task_wdt_reset();
+    //esp_task_wdt_reset();
     //connectToWiFi(1);
     WiFi.mode(WIFI_STA);
-    //WiFi.begin();
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    WiFi.setHostname("M3TR");
+    WiFi.begin();
+    //WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.setHostname("M3TR2.03");
 
     //portal.handleClient();
   }
@@ -341,7 +410,7 @@ void APmode(){
 
 void connectToWiFi(int x)
 { 
-  esp_task_wdt_reset();
+//  esp_task_wdt_reset();
   //Serial.println("Connect to Wifi");
   if (x == 1)
   {
@@ -352,12 +421,12 @@ void connectToWiFi(int x)
   if (WiFi.status() == WL_CONNECTED && millis() > zeit2)
   {
     Serial.print("pinging.. ");
-    esp_task_wdt_init(20, true); //enable panic so ESP32 restarts
-    esp_task_wdt_add(NULL); //add current thread to WDT watch
+    //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts
+    //esp_task_wdt_add(NULL); //add current thread to WDT watch
     if (Ping.ping("www.google.com", 2) == 1) //bool ret = Ping.ping("www.google.com",10); //repeticiones
     {
       //esp_task_wdt_disable();
-      disableCore0WDT();
+     // disableCore0WDT();
       avg_time_ms = Ping.averageTime();
       Serial.print(avg_time_ms);
       zeit2 = 10000 + millis();
@@ -378,7 +447,7 @@ void connectToWiFi(int x)
     }
     else
     {
-      disableCore0WDT();
+     // disableCore0WDT();
       Serial.print("no pong");
       flagonline = 0;
       digitalWrite(ledred, HIGH);
@@ -397,9 +466,9 @@ void connectToWiFi(int x)
     //WiFi.mode(WIFI_STA);
     WiFi.mode(WIFI_STA);
 
-    //WiFi.begin();
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    WiFi.setHostname("M3TR");
+    WiFi.begin();
+    //WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.setHostname("M3TR2.03");
 
     // Only try 30 times to connect to the WiFi
     int retries = 30;
@@ -409,12 +478,17 @@ void connectToWiFi(int x)
 
       //WiFi.setAutoReconnect(true);
       //WiFi.persistent(true);
+      //WiFi.begin();
       WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-      esp_task_wdt_reset();
+      //esp_task_wdt_reset();
       WiFi.reconnect();
       delay(1000);
       Serial.print(retries);
       retries--;
+     // giveup--;
+     // if(giveup==0){
+      //  esp_restart();
+     // }
     }
 
     if (WiFi.status() != WL_CONNECTED)
@@ -426,6 +500,7 @@ void connectToWiFi(int x)
 
     if (WiFi.status() == WL_CONNECTED)
     {
+      //giveup=20;
       WiFi.setAutoReconnect(true);
       WiFi.persistent(true);
       // bool ret = Ping.ping("www.google.com", 10);
@@ -468,7 +543,7 @@ void buttoncheck() //if pushbutton pressed for more than x times delay(millis), 
     Serial.println("button ");
     while (d < 30) //x times
     {
-      esp_task_wdt_reset();
+      //esp_task_wdt_reset();
       if (digitalRead(bot) == LOW)
       {
         Serial.print("! ");
@@ -510,7 +585,7 @@ void buttoncheck() //if pushbutton pressed for more than x times delay(millis), 
       d = 0;
       while (d < 100) //x times
       {
-        esp_task_wdt_reset();
+        //esp_task_wdt_reset();
         if (digitalRead(bot) == LOW)
         {
           Serial.print("! ");
@@ -570,6 +645,15 @@ void vbatcheck(){
     }
     if(flagnohayluz==1){
         if(vbat>=4.3){publishnow=0; flagnohayluz=0;}
+    }
+
+    if (vbat < 3.65)
+    {
+      digitalWrite(railEnable,HIGH);  //LOW=ON
+    }
+    if (vbat > 3.7)
+    {
+      digitalWrite(railEnable,LOW);  //LOW=ON
     }
     
     Serial.print(" vbat: ");Serial.print(vbat);
@@ -748,7 +832,7 @@ void flowread(){
     for(int i=0;i<multiplos;i++){
         if (publishnow==0){i=multiplos;Serial.println("i=multiplos!!!!! publica ya!");}
         readshort(); 
-        esp_task_wdt_reset();
+       // esp_task_wdt_reset();
         Serial.print(" ");Serial.print(i);Serial.print("/");Serial.print(multiplos);Serial.print(" ");
         
         //if(i==10 || i==60 || i==120 || i==180 || i==240 || i==300 || i==360 || i==420|| i==480 || i==540 || i==600 || i==660 || i==720 || i==780 || i==840){
@@ -781,18 +865,20 @@ void sendData(String params)
   HTTPClient http;
   String url = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID + "/exec?" + params;
 
-  // https://script.google.com/macros/s/AKfycbwvHLFtKlmxn1JLKSxQUXQtdGqMFZi6u8bgFvPCfZ_WAnRFYIVL/exec?anyparam=3&anyshit=56
-
   Serial.print(url);
   Serial.print("Making a request");
   http.begin(url, root_ca); //Specify the URL and certificate
   Serial.print("http.get:");
-  esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
+  //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
+
+  //hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer 
+
+
   //esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
   httpCode = http.GET();
   Serial.println("A VER");
   //esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
-  disableCore0WDT();
+  //disableCore0WDT();
   http.end();
   Serial.println("end");
   Serial.println(httpCode);
@@ -802,6 +888,22 @@ void sendData(String params)
   {
    // flowtotal = 0; //reset flowshort (flowtotal) para que pueda ir contando nuevamente mientras google responde
   }
+  else
+  {
+  Serial.print(url);
+  Serial.print("sending same message again...");
+  http.begin(url, root_ca); //Specify the URL and certificate
+  Serial.print("http.get:");
+  //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
+  //hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer 
+  //esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
+  httpCode = http.GET();
+  Serial.println("A VER");
+  //esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
+  //disableCore0WDT();
+  http.end();
+  }
+  
   flowtotal = 0;
   if (httpCode == -1)
   {
@@ -1021,6 +1123,16 @@ void looppublisher()
   }
 }//end looppublisher
 
+void railcheck()
+{
+  vbat=analogRead(lipocheck);
+  vbat=vbat*4/2267;           //from raw to volts
+  if (vbat > 3.6)
+  {
+    digitalWrite(railEnable, LOW); //LOW=ON
+  }
+}
+
 void setup()                                                                      /////////////////    SETUP    ///////////////////
 {
 
@@ -1030,7 +1142,7 @@ void setup()                                                                    
 
   Serial.println("Bienvenido a M3TR!");
 
-
+  EEPROM.begin(EEPROM_SIZE);
 
   
 
@@ -1040,6 +1152,8 @@ void setup()                                                                    
   Serial.println("-----------SETUP-----------");
   pinMode(flowpin,INPUT_PULLUP);
   pinMode(flowled,OUTPUT);
+  pinMode(railEnable,OUTPUT);
+  digitalWrite(railEnable,HIGH);  //LOW=ON
   
   pinMode(ledred,OUTPUT);
   digitalWrite(ledred,LOW);
@@ -1091,7 +1205,7 @@ void setup()                                                                    
 
     
   delay(100);
-  esp_task_wdt_reset();
+  //esp_task_wdt_reset();
 
  
   //connectToWiFi(0);
@@ -1138,9 +1252,11 @@ void setup()                                                                    
   //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts
   //esp_task_wdt_add(NULL); //add current thread to WDT watch
   
+
+  Serial.println("wifi begin setup");
   //WiFi.begin(); 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
-  esp_task_wdt_reset();
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD); delay(3000);
+  //esp_task_wdt_reset();
 
   connectToWiFi(1);
   //if (WiFi.status() != WL_CONNECTED){
@@ -1153,8 +1269,9 @@ void setup()                                                                    
   timeClient.setTimeOffset(0);
   timeClient.update();
   Serial.print(timeClient.getEpochTime());
+  
 
-
+railcheck();
 
 } //end setup
 
@@ -1166,7 +1283,16 @@ void loop()
   {
     looppublisher();
   }
-  esp_task_wdt_reset();
+
+
+  
+  if (millis() > timer)
+  {
+    timer = 3600000 + millis();
+    timebackup = 1;
+  }
+
+  //esp_task_wdt_reset();
   delay(300);
   Portal.handleClient();
 } //end loop
@@ -1176,4 +1302,6 @@ void loop()
 //publicar a google usando mqtt?
 
 //problema1: publicar tarda mas de 8 segundos por mensaje...
+//reintentar mensaje si no recibe un 200 o 302, al menos una vez
+
 
