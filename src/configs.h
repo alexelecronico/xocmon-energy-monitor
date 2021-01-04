@@ -9,11 +9,12 @@
 //String GOOGLE_SCRIPT_ID = "AKfycbz7PZjFy7pxur9boSm50U3tCV5JKOieMUfiJDPS";             // 02
 //String GOOGLE_SCRIPT_ID = "AKfycbydrQCU67gRJiyRCfhZBjQmjzSCFpmc5nGzjDBE";             // 03
 //String GOOGLE_SCRIPT_ID = "AKfycbyY0Kdl07u8Zjr1M7kntPsn45algjEQf6YY2c6lfUuTmzHaij0";  // 04
-String GOOGLE_SCRIPT_ID = "AKfycbz_pcCj8ovohrlNnCZdJ2IwtwzR-uG23ejIsSIlm56_a1PpTMLy"; //4.1
+String GOOGLE_SCRIPT_ID = "AKfycbz_pcCj8ovohrlNnCZdJ2IwtwzR-uG23ejIsSIlm56_a1PpTMLy";   //4.1
 
-const byte M3TR_unique_id = 4;
 
-const float M3TRver = 5;
+const byte M3TR_unique_id = 4;      //ID
+
+const float M3TRver = 7;            //version, debe ser iagual a la que se exporta p.ej firmware4.6.bin en https://s3.console.aws.amazon.com/s3/buckets/otabucketm?region=us-east-1&tab=objects
 
 
 const float M3TRid = M3TR_unique_id + M3TRver/100;  //p ej: 1.03;
@@ -25,11 +26,10 @@ const float M3TRid = M3TR_unique_id + M3TRver/100;  //p ej: 1.03;
 //const char * WIFI_PASSWORD = "ZbuQ54AsD4";
 //const char *WIFI_SSID = "Mm1";
 //const char *WIFI_PASSWORD = "12345678";
-//const char * WIFI_SSID = "AGUACATE";
-//const char * WIFI_PASSWORD = "chipotle";
-const char * WIFI_SSID = "Mm";
-const char * WIFI_PASSWORD = "12481632";
-const char * WIFI_SSID2 = "Mm1";
+const char * WIFI_SSID = "AGUACATE";
+const char * WIFI_PASSWORD = "chipotle";
+
+const char * WIFI_SSID2 = "Mm";
 const char * WIFI_PASSWORD2 = "12481632";
 
 const byte whitelistlength=1;
@@ -77,4 +77,5 @@ whiteID[0]=M3TR_unique_id;
 //04 se agrega OTA, si se quiere reflashear por serial un ESP que hizo OTA se tiene que borrar la flash con esptool.py --port /dev/cu.SLAB_USBtoUART erase_flash
 //   se arregla bug que hacia que publicara constantemente (creo que porque publishnor=0 cada vez que fallaba wifi)
 //05 se reestructura la publicacion de mensajes para optimizar que no se pierdan
-//06 
+//06 nueva estructura de payload para sensores lora (solar, boiler bkp, heater todo y nivo)
+//07 se incluye en la publicacion a google el contador de cada sensor extra (para ver que lleguen bien)

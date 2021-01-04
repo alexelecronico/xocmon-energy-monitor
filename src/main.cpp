@@ -20,6 +20,14 @@
 #include <HardwareSerial.h>
 HardwareSerial atSerial(1);
 
+#include <OneWire.h>
+#include <DS18B20.h>
+
+#define ONE_WIRE_BUS 15
+
+OneWire oneWire(ONE_WIRE_BUS);
+DS18B20 sensor(&oneWire);
+
 
 
 
@@ -182,10 +190,10 @@ TaskHandle_t Task2;
                                                                                                               /////   declaracion de variables  //////////
 
 
-const unsigned int BACKUPSIZE=300;
+const unsigned int BACKUPSIZE=200;
 int o=0;
 unsigned long currenttimearray[BACKUPSIZE];
-float payloadbag[BACKUPSIZE][12];
+float payloadbag[BACKUPSIZE][16];
 
 
 int multiplos=30;            //(sin unidad) cuantos "TiempoLectura" leo continuamente antes de reportar a la nube
@@ -244,19 +252,24 @@ int i=0;//temp
 bool acEnable;
 
 //---------atSERIAL-----------
-char bufserial[30];
+char bufserial[40];
 int lengthpayload;
 int validator = 0;
 //const byte whitelistlength=5;
 //int whiteID[whitelistlength];
 
 float bufhotflow;
-float bufhottemp;
+float bufhottempIN;
+float bufhottempOUT;
 float bufsolarbat;
 float bufnivo1;
 float bufnivo1temp;
 float bufnivo1bat;
+float bufsolarcount;
+float bufboilercount;
+float bufnivocount;
 int sensorID;
+byte caso=0;
 
 
 
@@ -409,11 +422,28 @@ void addtobasket() //checa que pueda subor datos a internet, si no entonces guar
 
   updatecurrentTime();
 
-  counterstatus++;
-  if (counterstatus > 9999)
+  if (caso == 0)
   {
-    counterstatus = 0;
+    counterstatus++;
+    if (counterstatus > 9999)
+    {
+      counterstatus = 0;
+    }
   }
+
+  if (flagonline == 0)
+  {
+    intcounterstatus = counterstatus;
+    counterstatus = intcounterstatus;
+    counterstatus = counterstatus + 0.1;
+  }
+  else
+  {
+    intcounterstatus = counterstatus;
+    counterstatus = intcounterstatus;
+  }
+
+
 
   o++;
   Serial.print("location 'o': ");
@@ -458,34 +488,23 @@ void addtobasket() //checa que pueda subor datos a internet, si no entonces guar
 
     //extras from lora sensors:
     payloadbag[o][6] = bufhotflow;        bufhotflow=0;
-    payloadbag[o][7] = bufhottemp;        bufhottemp=-1;
-    payloadbag[o][8] = bufsolarbat;       bufsolarbat=-1;
-    payloadbag[o][9] = bufnivo1;          bufnivo1=-1;
-    payloadbag[o][10] = bufnivo1temp;     bufnivo1temp=-1;
-    payloadbag[o][11] = bufnivo1bat;      bufnivo1bat=-1;
+    payloadbag[o][7] = bufhottempIN;      bufhottempIN=-1;      //deberia dejarlo con la temp anterior para que no joda los promedios
+    payloadbag[o][8] = bufhottempOUT;     bufhottempOUT=-1;       //voy a dejarlo un tiempo a ver como se comporta
+    payloadbag[o][9] = bufsolarbat;       bufsolarbat=-1;
+    payloadbag[o][10] = bufnivo1;         bufnivo1=-1;
+    payloadbag[o][11] = bufnivo1temp;     bufnivo1temp=-1;
+    payloadbag[o][12] = bufnivo1bat;      bufnivo1bat=-1;
+    payloadbag[o][13] = bufsolarcount;    bufsolarcount=-1;
+    payloadbag[o][14] = bufboilercount;   bufboilercount=-1;
+    payloadbag[o][15] = bufnivocount;     bufnivocount=-1;
     
-    // version: solar 2temps
-    // //extras from lora sensors:
-    // payloadbag[o][6] = bufhotflow;        bufhotflow=0;
-    // payloadbag[o][7] = bufhottempin;        bufhottemp=-1;
-    // payloadbag[o][7] = bufhottempout;        bufhottemp=-1;
-    // payloadbag[o][8] = bufsolarbat;       bufsolarbat=-1;
-    // payloadbag[o][9] = bufnivo1;          bufnivo1=-1;
-    // payloadbag[o][10] = bufnivo1temp;     bufnivo1temp=-1;
-    // payloadbag[o][11] = bufnivo1bat;      bufnivo1bat=-1;
-
-    // versiones extra sensors:
-    // 1. solar + boiler:
-    // - flow (es el mismo para solar y boiler, va en solar)
-    // - tempsolar in (temp agua ambiente)
-    // - tempsolar out (temp agua salida solar)
-    // - tempboiler in (temp agua entrada boiler) //medio trivial
-    // - tempboiler out (temp agua salida boiler)
-    // //para tempboiler se necesita un sensor adicional podria ser M3TR3xxx
-    // //falta ver cada cuando manda datos para que tenga sentido con solar (podria ser cuando detecte diferencias)
-    // //tambien falta ver como putas voy a meter tantas columnas de datos, se me hace que en otra sheet conbiene mas, pero como se hace eso?
-
-    // - nivo 
+ 
+  //casos: 1=solar or boiler only, 2=boiler backup, 3=heater todo
+  //M3TR2xxx,flujo=0, tempin, tempout, vbat, count
+  //SOLAR or BOILER if ID is  "M3TR1xxx",  flow,   tempin=0, tempout,  vbat,  count
+  //BOILER bkp if ID is       "M3TR2xxx",  flow=0, tempin,   tempout,  vbat,  count
+  //HEATER TODO if ID is      "M3TR3xxx",  flow,   tempin,   tempout,  vbat,  count
+  
 
 
     Serial.print("nr: ");
@@ -494,7 +513,7 @@ void addtobasket() //checa que pueda subor datos a internet, si no entonces guar
 
     Serial.print("               currenttime: ");
     Serial.println(currentTime);
-    Serial.print("               flowtemp1: ");
+    Serial.print("               flowtemp M3TR: ");
     Serial.println(flowtemp1);
     Serial.print("               flowtotal: ");
     Serial.println(flowtotal);
@@ -549,12 +568,22 @@ void checkserial() //recibe un mensaje del LoRa receiver y confirma que el ID se
         uno = M3TR_unique_id-cien*100-diez*10;//Serial.println(uno); 
       }
 
-      atSerial.print("1");   //solar
+      atSerial.print("1");    //solar
       atSerial.print(cien);   //solar
       atSerial.print(diez);
       atSerial.print(uno);
 
-      atSerial.print("2");   //nivo
+      atSerial.print("2");    //boiler bkp
+      atSerial.print(cien);   //solar
+      atSerial.print(diez);
+      atSerial.print(uno);
+
+      atSerial.print("3");    //heater all
+      atSerial.print(cien);   //solar
+      atSerial.print(diez);
+      atSerial.print(uno);
+
+      atSerial.print("4");    //nivo
       atSerial.print(cien);   //solar
       atSerial.print(diez);
       atSerial.print(uno);
@@ -567,7 +596,7 @@ void checkserial() //recibe un mensaje del LoRa receiver y confirma que el ID se
       Serial.print("(");
       long readtimer = 0;
       long readtimerpre = millis();
-      for (int i = 0; i < 30; i++)
+      for (int i = 0; i < 40; i++)
       {
         bufserial[i] = 0;
       } //cleanup
@@ -610,7 +639,9 @@ void checkserial() //recibe un mensaje del LoRa receiver y confirma que el ID se
         {
           Serial.print(" OK, type: ");
           if (bufserial[4] == '1' ){Serial.print("1 (solar), whiteID: ");}
-          if (bufserial[4] == '2' ){Serial.print("2 (nivo), whiteID: ");}
+          if (bufserial[4] == '2' ){Serial.print("2 (boiler bkp), whiteID: ");}
+          if (bufserial[4] == '3' ){Serial.print("3 (heater todo), whiteID: ");}
+          if (bufserial[4] == '4' ){Serial.print("4 (nivo), whiteID: ");}
           int cien = bufserial[5]- '0'; //convert from chat to int
           int diez = bufserial[6]- '0';
           int uno = bufserial[7]- '0';
@@ -645,297 +676,417 @@ void sensors()
     validator = 0;
     //nota: id es bufserial[5] * 100 + bufserial[6] * 10 + bufserial[7];
     //01234567
-    //SOLAR if ID is "M3TR1xxx",flow,temp,vbat,count
-    //          (M3TR1123 ,1234,123 ,123 ,1234,-12)      =26 char
-    //NIVO  if ID is "M3TR2xxx",level,temp,vbat,count
+    //SOLAR if ID is "M3TR1xxx",flow,tempIN=0,tempOUT,vbat,count
+    //               (M3TR1123 ,1234, 0      ,123    ,123, 1234,-12)      =26 char
+    //BOILER BKP  if ID is "M3TR2xxx",flow=0,tempIN,tempOUT,vbat,count
+    //          (M3TR2123 , 0  ,123 ,123 ,123,1234,-12)     =25 caracteres
+    //HEATER TODO  if ID is "M3TR3xxx",flow,tempIN,tempOUT,vbat,count
+    //          (M3TR3123 ,123  ,123 ,123 ,123,1234,-12)     =25 caracteres
+    //NIVO  if ID is "M3TR4xxx",level,temp,vbat,count
     //          (M3TR2123 ,123  ,123 ,123 ,1234,-12)     =25 caracteres
 
-    if (bufserial[4] == '1')
+      //float hotflowbkp = payloadbag[i][6];
+      //float hottempbkpIN = payloadbag[i][7];
+      //float hottempbkpOUT = payloadbag[i][8];
+      //float solarbatbkp = payloadbag[i][9];
+      //float nivo1bkp = payloadbag[i][10];
+      //float nivo1tempbkp = payloadbag[i][11];
+      //float nivo1batbkp = payloadbag[i][12];
+
+    if (bufserial[4] == '1')  //solar or boiler only
     {
-      //bufhotflow:
-      bufhotflow = 0;
-      byte x = 0;
-      for (int i = 9; i < 30; i++)
+      //bufhotflow////////////////////////////////////////////////////
+      bufhotflow = 0; byte x = 0;
+      for (int i = 9; i < 40; i++)
       {
-        if (bufserial[i] == ',')
-        {
-          i = 30;
-        }
+        if (bufserial[i] == ','){i = 40;}
         x++;
       }
       x--; //para corregir la cuenta de x
-      if (x == 1)
-      {
-        int uno = bufserial[9] - '0';
-        bufhotflow = uno;
-      }
-      if (x == 2)
-      {
-        int diez = bufserial[9] - '0';
-        int uno = bufserial[10] - '0';
-        bufhotflow = diez * 10 + uno;
-      }
-      if (x == 3)
-      {
-        int cien = bufserial[9] - '0';
-        int diez = bufserial[10] - '0';
-        int uno = bufserial[11] - '0';
-        bufhotflow = cien * 100 + diez * 10 + uno;
-      }
-      if (x == 4)
-      {
-        int mil = bufserial[9] - '0';
-        int cien = bufserial[10] - '0';
-        int diez = bufserial[11] - '0';
-        int uno = bufserial[12] - '0';
-        bufhotflow = mil * 1000 + cien * 100 + diez * 10 + uno;
-      }
+      if (x == 1) { int uno = bufserial[9] - '0'; bufhotflow = uno;}
+      if (x == 2) { int diez = bufserial[9] - '0'; int uno =  bufserial[10] - '0'; bufhotflow = diez * 10 + uno;}
+      if (x == 3) { int cien = bufserial[9] - '0'; int diez = bufserial[10] - '0'; int uno = bufserial[11] - '0'; bufhotflow = cien * 100 + diez * 10 + uno;}
+      if (x == 4) { int mil = bufserial[9] - '0';  int cien = bufserial[10] - '0'; int diez = bufserial[11] - '0'; int uno = bufserial[12] - '0'; bufhotflow = mil * 1000 + cien * 100 + diez * 10 + uno;}
       bufhotflow=bufhotflow/100;      // 1234 -> 12.34
       Serial.print(" bufhotflow: ");
       Serial.print(bufhotflow);
 
-      //bufhottemp
-      bufhottemp = 0;
+      //bufhottemp IN////////////////////////////////////////////////////
+      bufhottempIN = 0;
       byte i2 = x + 10;
       x = 0;
-      for (int i = i2; i < 30; i++)
+      for (int i = i2; i < 40; i++)
       {
-        if (bufserial[i] == ',')
-        {
-          i = 30;
-        }
+        if (bufserial[i] == ',') { i = 40; }
         x++;
       }
       x--; //para corregir la cuenta de x
-      if (x == 1)
-      {
-        int uno = bufserial[i2] - '0';
-        bufhottemp = uno;
-      }
-      if (x == 2)
-      {
-        int diez = bufserial[i2] - '0';
-        int uno = bufserial[i2 + 1] - '0';
-        bufhottemp = diez * 10 + uno;
-      }
-      if (x == 3)
-      {
-        int cien = bufserial[i2] - '0';
-        int diez = bufserial[i2 + 1] - '0';
-        int uno = bufserial[i2 + 2] - '0';
-        bufhottemp = cien * 100 + diez * 10 + uno;
-      }
-      if (x == 4)
-      {
-        int mil = bufserial[i2] - '0';
-        int cien = bufserial[i2 + 1] - '0';
-        int diez = bufserial[i2 + 2] - '0';
-        int uno = bufserial[i2 + 3] - '0';
-        bufhottemp = mil * 1000 + cien * 100 + diez * 10 + uno;
-      }
-      bufhottemp=bufhottemp/10;  //564 -> 56.4
-      Serial.print(" bufhottemp: ");
-      Serial.print(bufhottemp);
+      if (x == 1){int uno = bufserial[i2] - '0';bufhottempIN = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufhottempIN = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufhottempIN = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufhottempIN = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      bufhottempIN=bufhottempIN/10;  //564 -> 56.4
+      Serial.print(" bufhottempIN: ");
+      Serial.print(bufhottempIN);
 
-      //bufsolarbat
-      bufsolarbat = 0;
+      //bufhottemp OUT////////////////////////////////////////////////////
+      bufhottempOUT = 0;
       byte i3 = i2 + x + 1;
       i2 = i3;
       x = 0;
-      for (int i = i2; i < 30; i++)
+      for (int i = i2; i < 40; i++)
       {
-        if (bufserial[i] == ',')
-        {
-          i = 30;
-        }
+        if (bufserial[i] == ',') { i = 40; }
         x++;
       }
       x--; //para corregir la cuenta de x
-      if (x == 1)
+      if (x == 1){int uno = bufserial[i2] - '0';bufhottempOUT = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufhottempOUT = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufhottempOUT = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufhottempOUT = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      bufhottempOUT=bufhottempOUT/10;  //564 -> 56.4
+      Serial.print(" bufhottempOUT: ");
+      Serial.print(bufhottempOUT);
+
+      //bufsolarbat////////////////////////////////////////////////////
+      bufsolarbat = 0;
+      i3 = i2 + x + 1;
+      i2 = i3;
+      x = 0;
+      for (int i = i2; i < 40; i++)
       {
-        int uno = bufserial[i2] - '0';
-        bufsolarbat = uno;
+        if (bufserial[i] == ','){i = 40;}
+        x++;
       }
-      if (x == 2)
-      {
-        int diez = bufserial[i2] - '0';
-        int uno = bufserial[i2 + 1] - '0';
-        bufsolarbat = diez * 10 + uno;
-      }
-      if (x == 3)
-      {
-        int cien = bufserial[i2] - '0';
-        int diez = bufserial[i2 + 1] - '0';
-        int uno = bufserial[i2 + 2] - '0';
-        bufsolarbat = cien * 100 + diez * 10 + uno;
-      }
-      if (x == 4)
-      {
-        int mil = bufserial[i2] - '0';
-        int cien = bufserial[i2 + 1] - '0';
-        int diez = bufserial[i2 + 2] - '0';
-        int uno = bufserial[i2 + 3] - '0';
-        bufsolarbat = mil * 1000 + cien * 100 + diez * 10 + uno;
-      }
+      x--; //para corregir la cuenta de x
+      if (x == 1){int uno = bufserial[i2] - '0';bufsolarbat = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufsolarbat = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufsolarbat = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufsolarbat = mil * 1000 + cien * 100 + diez * 10 + uno;}
       Serial.print(" bufsolarbat: ");
       Serial.print(bufsolarbat);
 
-      //counter
+      //counter////////////////////////////////////////////////////
       unsigned int count = 0;
       i3 = i2 + x + 1;
       i2 = i3;
       x = 0;
-      for (int i = i2; i < 30; i++)
+      for (int i = i2; i < 40; i++)
       {
-        if (bufserial[i] == ',')
-        {
-          i = 30;
-        }
+        if (bufserial[i] == ','){i = 40;}
         x++;
       }
       x--; //para corregir la cuenta de x
-      if (x == 1)
-      {
-        int uno = bufserial[i2] - '0';
-        count = uno;
-      }
-      if (x == 2)
-      {
-        int diez = bufserial[i2] - '0';
-        int uno = bufserial[i2 + 1] - '0';
-        count = diez * 10 + uno;
-      }
-      if (x == 3)
-      {
-        int cien = bufserial[i2] - '0';
-        int diez = bufserial[i2 + 1] - '0';
-        int uno = bufserial[i2 + 2] - '0';
-        count = cien * 100 + diez * 10 + uno;
-      }
-      if (x == 4)
-      {
-        int mil = bufserial[i2] - '0';
-        int cien = bufserial[i2 + 1] - '0';
-        int diez = bufserial[i2 + 2] - '0';
-        int uno = bufserial[i2 + 3] - '0';
-        count = mil * 1000 + cien * 100 + diez * 10 + uno;
-      }
-      Serial.print(" count: ");
-      Serial.print(count);
+      if (x == 1){int uno = bufserial[i2] - '0';count = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';count = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';count = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';count = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      bufsolarcount=count;
+      Serial.print(" countserial: ");
+      Serial.print(bufsolarcount);
 
-      //rssi
+
+      //rssi////////////////////////////////////////////////////
       int rssi = 0;
       i3 = i2 + x + 2;
       i2 = i3;
       x = 0;
-      for (int i = i2; i < 33; i++)
+      for (int i = i2; i < 40; i++)
       {
-        if (bufserial[i] == ')')
-        {
-          i = 33;
-        }
+        if (bufserial[i] == ')'){i = 40;}
         x++;
       }
       x--; //para corregir la cuenta de x
-      if (x == 1)
-      {
-        int uno = bufserial[i2] - '0';
-        rssi = uno;
-      }
-      if (x == 2)
-      {
-        int diez = bufserial[i2] - '0';
-        int uno = bufserial[i2 + 1] - '0';
-        rssi = diez * 10 + uno;
-      }
-      if (x == 3)
-      {
-        int cien = bufserial[i2] - '0';
-        int diez = bufserial[i2 + 1] - '0';
-        int uno = bufserial[i2 + 2] - '0';
-        rssi = cien * 100 + diez * 10 + uno;
-      }
-      if (x == 4)
-      {
-        int mil = bufserial[i2] - '0';
-        int cien = bufserial[i2 + 1] - '0';
-        int diez = bufserial[i2 + 2] - '0';
-        int uno = bufserial[i2 + 3] - '0';
-        rssi = mil * 1000 + cien * 100 + diez * 10 + uno;
-      }
+      if (x == 1){int uno = bufserial[i2] - '0';rssi = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';rssi = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';rssi = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';rssi = mil * 1000 + cien * 100 + diez * 10 + uno;}
       Serial.print(" rssi: ");
       Serial.println(rssi);
       Serial.println("");
 
-      if (bufhotflow >= 0 && bufhottemp >= 0 && bufhottemp < 99 && bufsolarbat >= 0) //validar coherencia de datos
+      //if bufhotflow <= 0 && bufhottempIN >= 0 && bufhottempIN < 99 && bufhottempOUT >= 0 && bufhottempOUT < 99 && bufsolarbat >= 0
+      //validar y guardar
+      if (bufhotflow >= 0 && bufhottempOUT >= -10 && bufhottempOUT < 99) //validar coherencia de datos
       {
         payloadbag[i][6] = bufhotflow;
-        payloadbag[i][7] = bufhottemp;
-        payloadbag[i][8] = bufsolarbat;
+        payloadbag[i][7] = bufhottempIN;
+        payloadbag[i][8] = bufhottempOUT;
+        payloadbag[i][9] = bufsolarbat;
+        payloadbag[i][13] = bufsolarcount;
+        caso=1;
+        addtobasket();
+
+      }
+
+    } //end if bufserial4=1 (solar)
+
+    if (bufserial[4] == '2')  //boiler bkp
+    {
+      //bufhotflow////////////////////////////////////////////////////
+      bufhotflow = 0; byte x = 0;
+      for (int i = 9; i < 40; i++)
+      {
+        if (bufserial[i] == ','){i = 40;}
+        x++;
+      }
+      x--; //para corregir la cuenta de x
+      if (x == 1) { int uno = bufserial[9] - '0'; bufhotflow = uno;}
+      if (x == 2) { int diez = bufserial[9] - '0'; int uno =  bufserial[10] - '0'; bufhotflow = diez * 10 + uno;}
+      if (x == 3) { int cien = bufserial[9] - '0'; int diez = bufserial[10] - '0'; int uno = bufserial[11] - '0'; bufhotflow = cien * 100 + diez * 10 + uno;}
+      if (x == 4) { int mil = bufserial[9] - '0';  int cien = bufserial[10] - '0'; int diez = bufserial[11] - '0'; int uno = bufserial[12] - '0'; bufhotflow = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      bufhotflow=bufhotflow/100;      // 1234 -> 12.34
+      Serial.print(" bufhotflow: ");
+      Serial.print(bufhotflow);
+
+      //bufhottemp IN////////////////////////////////////////////////////
+      bufhottempIN = 0;
+      byte i2 = x + 10;
+      x = 0;
+      for (int i = i2; i < 40; i++)
+      {
+        if (bufserial[i] == ',') { i = 40; }
+        x++;
+      }
+      x--; //para corregir la cuenta de x
+      if (x == 1){int uno = bufserial[i2] - '0';bufhottempIN = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufhottempIN = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufhottempIN = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufhottempIN = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      bufhottempIN=bufhottempIN/10;  //564 -> 56.4
+      Serial.print(" bufhottempIN: ");
+      Serial.print(bufhottempIN);
+
+      //bufhottemp OUT////////////////////////////////////////////////////
+      bufhottempOUT = 0;
+      byte i3 = i2 + x + 1;
+      i2 = i3;
+      x = 0;
+      for (int i = i2; i < 40; i++)
+      {
+        if (bufserial[i] == ',') { i = 40; }
+        x++;
+      }
+      x--; //para corregir la cuenta de x
+      if (x == 1){int uno = bufserial[i2] - '0';bufhottempOUT = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufhottempOUT = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufhottempOUT = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufhottempOUT = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      bufhottempOUT=bufhottempOUT/10;  //564 -> 56.4
+      Serial.print(" bufhottempOUT: ");
+      Serial.print(bufhottempOUT);
+
+      //bufsolarbat////////////////////////////////////////////////////
+      bufsolarbat = 0;
+      i3 = i2 + x + 1;
+      i2 = i3;
+      x = 0;
+      for (int i = i2; i < 40; i++)
+      {
+        if (bufserial[i] == ','){i = 40;}
+        x++;
+      }
+      x--; //para corregir la cuenta de x
+      if (x == 1){int uno = bufserial[i2] - '0';bufsolarbat = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufsolarbat = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufsolarbat = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufsolarbat = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      Serial.print(" bufsolarbat: ");
+      Serial.print(bufsolarbat);
+
+      //counter////////////////////////////////////////////////////
+      unsigned int count = 0;
+      i3 = i2 + x + 1;
+      i2 = i3;
+      x = 0;
+      for (int i = i2; i < 40; i++)
+      {
+        if (bufserial[i] == ','){i = 40;}
+        x++;
+      }
+      x--; //para corregir la cuenta de x
+      if (x == 1){int uno = bufserial[i2] - '0';count = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';count = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';count = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';count = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      bufboilercount=count;
+      Serial.print(" countboiler: ");
+      Serial.print(bufboilercount);
+
+      //rssi////////////////////////////////////////////////////
+      int rssi = 0;
+      i3 = i2 + x + 2;
+      i2 = i3;
+      x = 0;
+      for (int i = i2; i < 40; i++)
+      {
+        if (bufserial[i] == ')'){i = 40;}
+        x++;
+      }
+      x--; //para corregir la cuenta de x
+      if (x == 1){int uno = bufserial[i2] - '0';rssi = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';rssi = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';rssi = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';rssi = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      Serial.print(" rssi: ");
+      Serial.println(rssi);
+      Serial.println("");
+
+      //validar y guardar
+      if (bufhotflow == 0 && bufhottempIN >= 0 && bufhottempIN < 99 && bufhottempOUT >= 0 && bufhottempOUT < 99 && bufsolarbat >= 0) //validar coherencia de datos
+      {
+        payloadbag[i][6] = bufhotflow;
+        payloadbag[i][7] = bufhottempIN;
+        payloadbag[i][8] = bufhottempOUT;
+        payloadbag[i][9] = bufsolarbat;
+        payloadbag[i][14] = bufboilercount;
+        caso=2;
+        addtobasket();
+
+      }
+
+    } //end if bufserial4=1 (solar)
+
+    if (bufserial[4] == '3')  //heater todo
+    {
+      //bufhotflow////////////////////////////////////////////////////
+      bufhotflow = 0; byte x = 0;
+      for (int i = 9; i < 40; i++)
+      {
+        if (bufserial[i] == ','){i = 40;}
+        x++;
+      }
+      x--; //para corregir la cuenta de x
+      if (x == 1) { int uno = bufserial[9] - '0'; bufhotflow = uno;}
+      if (x == 2) { int diez = bufserial[9] - '0'; int uno =  bufserial[10] - '0'; bufhotflow = diez * 10 + uno;}
+      if (x == 3) { int cien = bufserial[9] - '0'; int diez = bufserial[10] - '0'; int uno = bufserial[11] - '0'; bufhotflow = cien * 100 + diez * 10 + uno;}
+      if (x == 4) { int mil = bufserial[9] - '0';  int cien = bufserial[10] - '0'; int diez = bufserial[11] - '0'; int uno = bufserial[12] - '0'; bufhotflow = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      bufhotflow=bufhotflow/100;      // 1234 -> 12.34
+      Serial.print(" bufhotflow: ");
+      Serial.print(bufhotflow);
+
+      //bufhottemp IN////////////////////////////////////////////////////
+      bufhottempIN = 0;
+      byte i2 = x + 10;
+      x = 0;
+      for (int i = i2; i < 40; i++)
+      {
+        if (bufserial[i] == ',') { i = 40; }
+        x++;
+      }
+      x--; //para corregir la cuenta de x
+      if (x == 1){int uno = bufserial[i2] - '0';bufhottempIN = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufhottempIN = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufhottempIN = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufhottempIN = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      bufhottempIN=bufhottempIN/10;  //564 -> 56.4
+      Serial.print(" bufhottempIN: ");
+      Serial.print(bufhottempIN);
+
+      //bufhottemp OUT////////////////////////////////////////////////////
+      bufhottempOUT = 0;
+      byte i3 = i2 + x + 1;
+      i2 = i3;
+      x = 0;
+      for (int i = i2; i < 40; i++)
+      {
+        if (bufserial[i] == ',') { i = 40; }
+        x++;
+      }
+      x--; //para corregir la cuenta de x
+      if (x == 1){int uno = bufserial[i2] - '0';bufhottempOUT = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufhottempOUT = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufhottempOUT = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufhottempOUT = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      bufhottempOUT=bufhottempOUT/10;  //564 -> 56.4
+      Serial.print(" bufhottempOUT: ");
+      Serial.print(bufhottempOUT);
+
+      //bufsolarbat////////////////////////////////////////////////////
+      bufsolarbat = 0;
+      i3 = i2 + x + 1;
+      i2 = i3;
+      x = 0;
+      for (int i = i2; i < 40; i++)
+      {
+        if (bufserial[i] == ','){i = 40;}
+        x++;
+      }
+      x--; //para corregir la cuenta de x
+      if (x == 1){int uno = bufserial[i2] - '0';bufsolarbat = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufsolarbat = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufsolarbat = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufsolarbat = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      Serial.print(" bufsolarbat: ");
+      Serial.print(bufsolarbat);
+
+      //counter////////////////////////////////////////////////////
+      unsigned int count = 0;
+      i3 = i2 + x + 1;
+      i2 = i3;
+      x = 0;
+      for (int i = i2; i < 40; i++)
+      {
+        if (bufserial[i] == ','){i = 40;}
+        x++;
+      }
+      x--; //para corregir la cuenta de x
+      if (x == 1){int uno = bufserial[i2] - '0';count = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';count = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';count = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';count = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      bufsolarcount=count;
+      Serial.print(" countheater: ");
+      Serial.print(bufsolarcount);
+
+      //rssi////////////////////////////////////////////////////
+      int rssi = 0;
+      i3 = i2 + x + 2;
+      i2 = i3;
+      x = 0;
+      for (int i = i2; i < 40; i++)
+      {
+        if (bufserial[i] == ')'){i = 40;}
+        x++;
+      }
+      x--; //para corregir la cuenta de x
+      if (x == 1){int uno = bufserial[i2] - '0';rssi = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';rssi = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';rssi = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';rssi = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      Serial.print(" rssi: ");
+      Serial.println(rssi);
+      Serial.println("");
+
+      //validar y guardar
+      if (bufhotflow >= 0 && bufhottempIN >= -10 && bufhottempIN < 99 && bufhottempOUT >= -10 && bufhottempOUT < 99 && bufsolarbat >= 0) //validar coherencia de datos
+      {
+        payloadbag[i][6] = bufhotflow;
+        payloadbag[i][7] = bufhottempIN;
+        payloadbag[i][8] = bufhottempOUT;
+        payloadbag[i][9] = bufsolarbat;
+        payloadbag[i][13] = bufsolarcount;
+        caso=3;
         addtobasket();
       }
 
     } //end if bufserial4=1 (solar)
 
-    // float bufhotflow;
-    // float bufhottemp;
-    // float bufsolarbat;
-    // float bufnivo1;
-    // float bufnivo1temp;
-    // float bufnivo1bat;
-
-
-      //float hotflowbkp = payloadbag[i][6];
-      //float hottempbkp = payloadbag[i][7];
-      //float solarbatbkp = payloadbag[i][8];
-      //float nivo1bkp = payloadbag[i][9];
-      //float nivo1tempbkp = payloadbag[i][10];
-      //float nivo1batbkp = payloadbag[i][11];
-
-     
-
-
-
-    if (bufserial[4] == '2') //nivo
+    if (bufserial[4] == '4') //nivo
     {
       //bufnivo1:
       bufnivo1 = 0;
       byte x = 0;
-      for (int i = 9; i < 30; i++)
+      for (int i = 9; i < 40; i++)
       {
-        if (bufserial[i] == ',')
-        {
-          i = 30;
-        }
+        if (bufserial[i] == ','){i = 40;}
         x++;
       }
       x--; //para corregir la cuenta de x
-      if (x == 1)
-      {
-        int uno = bufserial[9] - '0';
-        bufnivo1 = uno;
-      }
-      if (x == 2)
-      {
-        int diez = bufserial[9] - '0';
-        int uno = bufserial[10] - '0';
-        bufnivo1 = diez * 10 + uno;
-      }
-      if (x == 3)
-      {
-        int cien = bufserial[9] - '0';
-        int diez = bufserial[10] - '0';
-        int uno = bufserial[11] - '0';
-        bufnivo1 = cien * 100 + diez * 10 + uno;
-      }
-      if (x == 4)
-      {
-        int mil = bufserial[9] - '0';
-        int cien = bufserial[10] - '0';
-        int diez = bufserial[11] - '0';
-        int uno = bufserial[12] - '0';
-        bufnivo1 = mil * 1000 + cien * 100 + diez * 10 + uno;
-      }
+      if (x == 1){int uno = bufserial[9] - '0';bufnivo1 = uno;}
+      if (x == 2){int diez = bufserial[9] - '0';int uno = bufserial[10] - '0';bufnivo1 = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[9] - '0';int diez = bufserial[10] - '0';int uno = bufserial[11] - '0';bufnivo1 = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[9] - '0';int cien = bufserial[10] - '0';int diez = bufserial[11] - '0';int uno = bufserial[12] - '0';bufnivo1 = mil * 1000 + cien * 100 + diez * 10 + uno;}
       Serial.print(" bufnivo1: ");
       Serial.print(bufnivo1);
 
@@ -943,41 +1094,16 @@ void sensors()
       bufnivo1temp = 0;
       byte i2 = x + 10;
       x = 0;
-      for (int i = i2; i < 30; i++)
+      for (int i = i2; i < 40; i++)
       {
-        if (bufserial[i] == ',')
-        {
-          i = 30;
-        }
+        if (bufserial[i] == ','){i = 40;}// checar que 30 sean suficientes y no me falten mas
         x++;
       }
       x--; //para corregir la cuenta de x
-      if (x == 1)
-      {
-        int uno = bufserial[i2] - '0';
-        bufnivo1temp = uno;
-      }
-      if (x == 2)
-      {
-        int diez = bufserial[i2] - '0';
-        int uno = bufserial[i2 + 1] - '0';
-        bufnivo1temp = diez * 10 + uno;
-      }
-      if (x == 3)
-      {
-        int cien = bufserial[i2] - '0';
-        int diez = bufserial[i2 + 1] - '0';
-        int uno = bufserial[i2 + 2] - '0';
-        bufnivo1temp = cien * 100 + diez * 10 + uno;
-      }
-      if (x == 4)
-      {
-        int mil = bufserial[i2] - '0';
-        int cien = bufserial[i2 + 1] - '0';
-        int diez = bufserial[i2 + 2] - '0';
-        int uno = bufserial[i2 + 3] - '0';
-        bufnivo1temp = mil * 1000 + cien * 100 + diez * 10 + uno;
-      }
+      if (x == 1){int uno = bufserial[i2] - '0';bufnivo1temp = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufnivo1temp = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufnivo1temp = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufnivo1temp = mil * 1000 + cien * 100 + diez * 10 + uno;}
       bufnivo1temp=bufnivo1temp/10;
       Serial.print(" bufnivo1temp: ");
       Serial.print(bufnivo1temp);
@@ -987,41 +1113,16 @@ void sensors()
       byte i3 = i2 + x + 1;
       i2 = i3;
       x = 0;
-      for (int i = i2; i < 30; i++)
+      for (int i = i2; i < 40; i++)
       {
-        if (bufserial[i] == ',')
-        {
-          i = 30;
-        }
+        if (bufserial[i] == ','){i = 40;}
         x++;
       }
       x--; //para corregir la cuenta de x
-      if (x == 1)
-      {
-        int uno = bufserial[i2] - '0';
-        bufnivo1bat = uno;
-      }
-      if (x == 2)
-      {
-        int diez = bufserial[i2] - '0';
-        int uno = bufserial[i2 + 1] - '0';
-        bufnivo1bat = diez * 10 + uno;
-      }
-      if (x == 3)
-      {
-        int cien = bufserial[i2] - '0';
-        int diez = bufserial[i2 + 1] - '0';
-        int uno = bufserial[i2 + 2] - '0';
-        bufnivo1bat = cien * 100 + diez * 10 + uno;
-      }
-      if (x == 4)
-      {
-        int mil = bufserial[i2] - '0';
-        int cien = bufserial[i2 + 1] - '0';
-        int diez = bufserial[i2 + 2] - '0';
-        int uno = bufserial[i2 + 3] - '0';
-        bufnivo1bat = mil * 1000 + cien * 100 + diez * 10 + uno;
-      }
+      if (x == 1){int uno = bufserial[i2] - '0';bufnivo1bat = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufnivo1bat = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0'; bufnivo1bat = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufnivo1bat = mil * 1000 + cien * 100 + diez * 10 + uno;}
       Serial.print(" bufnivo1bat: ");
       Serial.print(bufnivo1bat);
 
@@ -1030,94 +1131,47 @@ void sensors()
       i3 = i2 + x + 1;
       i2 = i3;
       x = 0;
-      for (int i = i2; i < 30; i++)
+      for (int i = i2; i < 40; i++)
       {
-        if (bufserial[i] == ',')
-        {
-          i = 30;
-        }
+        if (bufserial[i] == ','){i = 40;}
         x++;
       }
       x--; //para corregir la cuenta de x
-      if (x == 1)
-      {
-        int uno = bufserial[i2] - '0';
-        count = uno;
-      }
-      if (x == 2)
-      {
-        int diez = bufserial[i2] - '0';
-        int uno = bufserial[i2 + 1] - '0';
-        count = diez * 10 + uno;
-      }
-      if (x == 3)
-      {
-        int cien = bufserial[i2] - '0';
-        int diez = bufserial[i2 + 1] - '0';
-        int uno = bufserial[i2 + 2] - '0';
-        count = cien * 100 + diez * 10 + uno;
-      }
-      if (x == 4)
-      {
-        int mil = bufserial[i2] - '0';
-        int cien = bufserial[i2 + 1] - '0';
-        int diez = bufserial[i2 + 2] - '0';
-        int uno = bufserial[i2 + 3] - '0';
-        count = mil * 1000 + cien * 100 + diez * 10 + uno;
-      }
-      Serial.print(" count: ");
-      Serial.print(count);
+      if (x == 1){int uno = bufserial[i2] - '0';count = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';count = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';count = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';count = mil * 1000 + cien * 100 + diez * 10 + uno;}
+      bufnivocount=count;
+      Serial.print(" countnivo: ");
+      Serial.print(bufnivocount);
 
       //rssi
       int rssi = 0;
       i3 = i2 + x + 2;
       i2 = i3;
       x = 0;
-      for (int i = i2; i < 33; i++)
+      for (int i = i2; i < 40; i++)
       {
-        if (bufserial[i] == ')')
-        {
-          i = 33;
-        }
+        if (bufserial[i] == ')'){i = 40;}
         x++;
       }
       x--; //para corregir la cuenta de x
-      if (x == 1)
-      {
-        int uno = bufserial[i2] - '0';
-        rssi = uno;
-      }
-      if (x == 2)
-      {
-        int diez = bufserial[i2] - '0';
-        int uno = bufserial[i2 + 1] - '0';
-        rssi = diez * 10 + uno;
-      }
-      if (x == 3)
-      {
-        int cien = bufserial[i2] - '0';
-        int diez = bufserial[i2 + 1] - '0';
-        int uno = bufserial[i2 + 2] - '0';
-        rssi = cien * 100 + diez * 10 + uno;
-      }
-      if (x == 4)
-      {
-        int mil = bufserial[i2] - '0';
-        int cien = bufserial[i2 + 1] - '0';
-        int diez = bufserial[i2 + 2] - '0';
-        int uno = bufserial[i2 + 3] - '0';
-        rssi = mil * 1000 + cien * 100 + diez * 10 + uno;
-      }
+      if (x == 1){int uno = bufserial[i2] - '0';rssi = uno;}
+      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';rssi = diez * 10 + uno;}
+      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';rssi = cien * 100 + diez * 10 + uno;}
+      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';rssi = mil * 1000 + cien * 100 + diez * 10 + uno;}
       Serial.print(" rssi: ");
       Serial.println(rssi);
       Serial.println("");
-      //falta: filtro de coherencia de datos (que no sean negativos o fuera de rango)
+      //filtro de coherencia de datos (que no sean negativos o fuera de rango)
 
-      if (bufnivo1 >= 0 && bufnivo1temp >= 0 && bufnivo1temp < 9999 && bufnivo1bat >= 0) //validar coherencia de datos
+      if (bufnivo1 >= 0 && bufnivo1temp >= -10 && bufnivo1temp < 99 && bufnivo1bat >= 0) //validar coherencia de datos
       {
-        payloadbag[i][9] = bufnivo1;
-        payloadbag[i][10] = bufnivo1temp;
-        payloadbag[i][11] = bufnivo1bat;
+        payloadbag[i][10] = bufnivo1;
+        payloadbag[i][11] = bufnivo1temp;
+        payloadbag[i][12] = bufnivo1bat;
+        payloadbag[i][15] = bufnivocount;
+        caso=4;
         addtobasket();
       }
     }
@@ -1392,6 +1446,14 @@ void vbatcheck(){
     Serial.print(" vbat: ");Serial.print(vbat);
 }
 
+void tempread(){
+  
+  sensor.requestTemperatures();
+  Serial.print("TEMPREAD is:");
+  flowtemp1 = sensor.getTempC();
+  Serial.println(flowtemp1);
+}
+
 void readshort(){
     unsigned long timer1=millis();
     //long timer2=millis();
@@ -1423,7 +1485,6 @@ void readshort(){
        // }
     //}
 }
-
 
 void flowread(){
   Serial.print("flowread..");
@@ -1634,9 +1695,7 @@ void empaquetador(){       //milis          //promedia las mediciones de cada pe
         
     if (flagpub == 1) {
       vbatcheck();
-      //tempread();
-
-
+      tempread();
       //en vez de publicador() voy a mandar el dato a una cubeta como si siempre estuviera offline. el otro core va a estar sacando de la cubeta cuando hay ainternet y si no se espera.
       publicador(); flagpubcount=0; //antes estaba aqui flowtotal=0; pero lo movi adespues de sendData
     } 
@@ -1683,16 +1742,39 @@ void looppublisher()
 
        
       float hotflowbkp = payloadbag[i][6];
-      float hottempbkp = payloadbag[i][7];
-      float solarbatbkp = payloadbag[i][8];
-      float nivo1bkp = payloadbag[i][9];
-      float nivo1tempbkp = payloadbag[i][10];
-      float nivo1batbkp = payloadbag[i][11];
-      //float nivo2batbkp = payloadbag[i][12];
+      float hottempbkpIN = payloadbag[i][7];
+      float hottempbkpOUT = payloadbag[i][8];
+      float solarbatbkp = payloadbag[i][9];
+      float nivo1bkp = payloadbag[i][10];
+      float nivo1tempbkp = payloadbag[i][11];
+      float nivo1batbkp = payloadbag[i][12];
+      float solarcountbkp = payloadbag[i][13];
+      float boilercountbkp = payloadbag[i][14];
+      float nivocountbkp = payloadbag[i][15];
+      
 
-      //old sendData("Timestamp_Device=" + String(currentTimebkp) + "&device_id=" + String(M3TRid) + "&temp=" + String(flowtempbkp) + "&flowshort=" + String(flowtotal) + "&flowacum=" + String(flowacumbkp) + "&vbat=" + String(vbatbkp) + "&counterstatus=" + String(counterstatusbkp));
-      //hotflowbkp=0.1;hottempbkp=1.1;solarbatbkp=2.2;nivo1bkp=3.3;nivo1tempbkp=4.4;nivo1batbkp=5.5;
-      sendData("Timestamp_Device=" + String(currentTimebkp) + "&device_id=" + String(M3TRid) + "&temp=" + String(flowtempbkp) + "&flowshort=" + String(flowtotal) + "&flowacum=" + String(flowacumbkp) + "&vbat=" + String(vbatbkp) + "&counterstatus=" + String(counterstatusbkp) + "&hotflow=" + String(hotflowbkp)+ "&hottemp=" + String(hottempbkp)+ "&solarbat=" + String(solarbatbkp)+ "&nivo1=" + String(nivo1bkp) + "&nivo1temp=" + String(nivo1tempbkp)+ "&nivo1bat=" + String(nivo1batbkp)); 
+      //very old sendData("Timestamp_Device=" + String(currentTimebkp) + "&device_id=" + String(M3TRid) + "&temp=" + String(flowtempbkp) + "&flowshort=" + String(flowtotal) + "&flowacum=" + String(flowacumbkp) + "&vbat=" + String(vbatbkp) + "&counterstatus=" + String(counterstatusbkp));
+      //less old   sendData("Timestamp_Device=" + String(currentTimebkp) + "&device_id=" + String(M3TRid) + "&temp=" + String(flowtempbkp) + "&flowshort=" + String(flowtotal) + "&flowacum=" + String(flowacumbkp) + "&vbat=" + String(vbatbkp) + "&counterstatus=" + String(counterstatusbkp) + "&hotflow=" + String(hotflowbkp)+ "&hottemp=" + String(hottempbkp)+ "&solarbat=" + String(solarbatbkp)+ "&nivo1=" + String(nivo1bkp) + "&nivo1temp=" + String(nivo1tempbkp)+ "&nivo1bat=" + String(nivo1batbkp)); 
+      
+      if(caso==0){    //datos de M3TR, no de los sensores extra
+        sendData("Timestamp_Device=" + String(currentTimebkp) + "&config_id=" + String(caso)+ "&device_id=" + String(M3TRid) + "&temp=" + String(flowtempbkp) + "&flowshort=" + String(flowtotal) + "&flowacum=" + String(flowacumbkp) + "&vbat=" + String(vbatbkp) + "&counterstatus=" + String(counterstatusbkp)); 
+        //sendData("Timestamp_Device=" + String(currentTimebkp) + "&device_id=" + String(M3TRid) + "&temp=" + String(flowtempbkp) + "&flowshort=" + String(flowtotal) + "&flowacum=" + String(flowacumbkp) + "&vbat=" + String(vbatbkp) + "&counterstatus=" + String(counterstatusbkp) + "&hotflow=" + String(hotflowbkp)+ "&hottemp=" + String(0)+ "&solarbat=" + String(solarbatbkp)+ "&nivo1=" + String(nivo1bkp) + "&nivo1temp=" + String(nivo1tempbkp)+ "&nivo1bat=" + String(nivo1batbkp)); 
+        //ejemplo:  https://script.google.com/macros/s/AKfycbz_pcCj8ovohrlNnCZdJ2IwtwzR-uG23ejIsSIlm56_a1PpTMLy/exec?Timestamp_Device=123&config_id=0&device_id=3312&temp=10&flowshort=1&flowacum=2&vbat=3&counterstatus=4  if(caso==1 || caso==2 || caso==3){    //datos de sensores extra via LoRa ("solar", or "boiler bkp" or "heater todo")
+        }
+      if(caso==1 ||caso==3){    //datos de sensores extra via LoRa (solar y heater)
+        sendData("Timestamp_Device=" + String(currentTimebkp) + "&config_id=" + String(caso) + "&flow=" + String(hotflowbkp) + "&tempIN=" + String(hottempbkpIN)+ "&tempOUT=" + String(hottempbkpOUT) + "&vbat=" + String(solarbatbkp)+ "&count=" + String(solarcountbkp));// + "&count=" + String(0)); //count todavia no esta soportado, no se si se necesita
+        //ejemplo https://script.google.com/macros/s/AKfycbz_pcCj8ovohrlNnCZdJ2IwtwzR-uG23ejIsSIlm56_a1PpTMLy/exec?Timestamp_Device=123&config_id=2&flow=3312&tempIN=10&tempOUT=1&vbat=5
+      }
+      if(caso==2){    //datos de sensores extra via LoRa (boiler)
+        sendData("Timestamp_Device=" + String(currentTimebkp) + "&config_id=" + String(caso) + "&flow=" + String(hotflowbkp) + "&tempIN=" + String(hottempbkpIN)+ "&tempOUT=" + String(hottempbkpOUT) + "&vbat=" + String(solarbatbkp)+ "&count=" + String(boilercountbkp));// + "&count=" + String(0)); //count todavia no esta soportado, no se si se necesita
+        //ejemplo https://script.google.com/macros/s/AKfycbz_pcCj8ovohrlNnCZdJ2IwtwzR-uG23ejIsSIlm56_a1PpTMLy/exec?Timestamp_Device=123&config_id=2&flow=3312&tempIN=10&tempOUT=1&vbat=5
+      }
+      if(caso==4){    //datos de sensores extra via LoRa (nivo)
+        sendData("Timestamp_Device=" + String(currentTimebkp) + "&config_id=" + String(caso)+ "&level=" + String(nivo1bkp) + "&tempIN=" + String(nivo1tempbkp) + "&vbat=" + String(nivo1batbkp)+ "&count=" + String(nivocountbkp));// + "&counterstatus=" + String(counterstatusbkp)); 
+      }
+      caso=0;
+      
+
 
       if (flagonline == 1)
       {
@@ -1740,19 +1822,19 @@ OTA.update(bin);
 
 void setup() /////////////////    SETUP    ///////////////////
   {
-    delay(200);
+    //delay(200);
     Serial.begin(9600);
-    delay(300);
+    //delay(300);
     Serial.print("\n\n");
-    Serial.println("Bienvenido a M3TR!");
-    delay(100);
+    Serial.println("Bienvenido a M3TR! putas");
+    //delay(100);
   
   
     //atSerial.println("Texto");
 
     EEPROM.begin(EEPROM_SIZE);
 
-    delay(100);
+    //delay(100);
     Serial.println("-----------SETUP-----------");
     pinMode(flowpin, INPUT_PULLUP);
     pinMode(flowled, OUTPUT);
@@ -1780,6 +1862,9 @@ void setup() /////////////////    SETUP    ///////////////////
     digitalWrite(ledred, HIGH);
     digitalWrite(ledgreen, LOW);
     delay(300);
+
+
+
     Serial.println("Configuring WDT core 0...");
 
     /*
@@ -1887,8 +1972,7 @@ void setup() /////////////////    SETUP    ///////////////////
   
 
 //railcheck();
-
-//OTAcheck();
+    sensor.begin(); //ds18b20 temp sensor (pin gpio15)
 
 
 } //end setup
@@ -1908,6 +1992,12 @@ void loop()
     timebackup = 1;
   }
 
+  if (millis() > timerOTA)
+  {
+    timerOTA = 180000 + millis(); //cada 3 min
+    OTAcheck();
+  }
+
   checkserial();
   sensors();  
 
@@ -1915,7 +2005,8 @@ void loop()
   Portal.handleClient();
 } //end loop
 
-//OTA
+
+
 
 //problema1: publicar tarda mas de 8 segundos por mensaje...
 
@@ -1923,4 +2014,6 @@ void loop()
 //esptool.py  --port /dev/cu.SLAB_USBtoUART erase_flash
 
 
-//falta: considerar ajustar la payload de solar para que tenga temp in y temp out , talvez quitar nivotemp?
+//falta: watchdog
+//falta hacer backup de version estable
+
