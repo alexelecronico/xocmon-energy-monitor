@@ -11,18 +11,15 @@
 //String GOOGLE_SCRIPT_ID = "AKfycbwgalsXzeVeO8QHh8E_kSYRllym3W6jJj2x16DpUDXUa_deztIh7aRKg45I4_2l4E9X";               //3.1
 //String GOOGLE_SCRIPT_ID = "AKfycbyY0Kdl07u8Zjr1M7kntPsn45algjEQf6YY2c6lfUuTmzHaij0";  // 04
 //String GOOGLE_SCRIPT_ID = "AKfycbz_pcCj8ovohrlNnCZdJ2IwtwzR-uG23ejIsSIlm56_a1PpTMLy";   //4.1
+String GOOGLE_SCRIPT_ID = "AKfycbyfigPBkOwgQqVVMdyOYU5DwJRTJNTbfVAJqpoU2n84GX3bieQKKhRrPvTdnI6CCzJC";              //4.2
 //String GOOGLE_SCRIPT_ID = "AKfycbxq6K9hSCv-Lvjgm-MFzRNTcbTdU4Dq-7M0AnGs33pGTxB7arfNXPNb";   //5.1
-String GOOGLE_SCRIPT_ID = "AKfycbzS0dr03JAKFMKoE8I4a-Kjfl--5MfiH9HUFCo2On3cRGcsPP-7cBuaRP2e5LtlhOnS";   //new 5.1
+//String GOOGLE_SCRIPT_ID = "AKfycbzS0dr03JAKFMKoE8I4a-Kjfl--5MfiH9HUFCo2On3cRGcsPP-7cBuaRP2e5LtlhOnS";   //new 5.1
 
 
 
+const byte M3TR_unique_id = 4;      //ID
 
-
-
-
-const byte M3TR_unique_id = 5;      //ID
-
-const float M3TRver = 8;            //version, debe ser igual a la que se exporta p.ej firmware4.6.bin en https://s3.console.aws.amazon.com/s3/buckets/otabucketm?region=us-east-1&tab=objects    aguapasapormicasaaws3!
+const float M3TRver = 11;            //version, debe ser igual a la que se exporta p.ej firmware4.6.bin en https://s3.console.aws.amazon.com/s3/buckets/otabucketm?region=us-east-1&tab=objects    aguapasapormicasaaws3!
 
 
 const float M3TRid = M3TR_unique_id + M3TRver/100;  //p ej: 1.03;
@@ -32,10 +29,10 @@ const float M3TRid = M3TR_unique_id + M3TRver/100;  //p ej: 1.03;
 
 //const char * WIFI_SSID = "INFINITUMA17B_2.4";
 //const char * WIFI_PASSWORD = "ZbuQ54AsD4";
-const char * WIFI_SSID = "WiFi Casaclub";
-const char * WIFI_PASSWORD = "Cclub$21";
-//const char * WIFI_SSID = "AGUACATEx";
-//const char * WIFI_PASSWORD = "chipotle";
+//const char * WIFI_SSID = "WiFi Casaclub";
+//const char * WIFI_PASSWORD = "Cclub$21";
+const char * WIFI_SSID = "AGUACATEx";
+const char * WIFI_PASSWORD = "chipotle";
 
 const char * WIFI_SSID_m3tr = "m3tr";
 const char * WIFI_PASSWORD2 = "12345678";
@@ -88,3 +85,4 @@ whiteID[0]=M3TR_unique_id;
 //06 nueva estructura de payload para sensores lora (solar, boiler bkp, heater todo y nivo)
 //07 se incluye en la publicacion a google el contador de cada sensor extra (para ver que lleguen bien)
 //08 bug fix "cadena demasiado larga", se incrementa lengthpayload de 31 a 40
+//09 y 10 nada, solo se uso para probar ota en 4.2

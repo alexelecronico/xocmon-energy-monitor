@@ -131,59 +131,60 @@ AutoConnect       Portal(Server);
 AutoConnectConfig Config;       // Enable autoReconnect supported on v0.9.4
 AutoConnectAux    Timezone;
 
-void rootPage() {
-  String  content =
-    "<html>"
-    "<head>"
-    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-    "<script type=\"text/javascript\">"
-    "setTimeout(\"location.reload()\", 1000);"
-    "</script>"
-    "</head>"
-    "<body>"
-    "<h2 align=\"center\" style=\"color:blue;margin:20px;\">Hello, world</h2>"
-    "<h3 align=\"center\" style=\"color:gray;margin:10px;\">{{DateTime}}</h3>"
-    "<p style=\"text-align:center;\">Reload the page to update the time.</p>"
-    "<p></p><p style=\"padding-top:15px;text-align:center\">" AUTOCONNECT_LINK(COG_24) "</p>"
-    "</body>"
-    "</html>";
-  static const char *wd[7] = { "Sun","Mon","Tue","Wed","Thr","Fri","Sat" };
-  struct tm *tm;
-  time_t  t;
-  char    dateTime[26];
 
-  t = time(NULL);
-  tm = localtime(&t);
-  sprintf(dateTime, "%04d/%02d/%02d(%s) %02d:%02d:%02d.",
-    tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-    wd[tm->tm_wday],
-    tm->tm_hour, tm->tm_min, tm->tm_sec);
-  content.replace("{{DateTime}}", String(dateTime));
-  Server.send(200, "text/html", content);
-}
+// void rootPage() {
+//   String  content =
+//     "<html>"
+//     "<head>"
+//     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+//     "<script type=\"text/javascript\">"
+//     "setTimeout(\"location.reload()\", 1000);"
+//     "</script>"
+//     "</head>"
+//     "<body>"
+//     "<h2 align=\"center\" style=\"color:blue;margin:20px;\">Hello, world</h2>"
+//     "<h3 align=\"center\" style=\"color:gray;margin:10px;\">{{DateTime}}</h3>"
+//     "<p style=\"text-align:center;\">Reload the page to update the time.</p>"
+//     "<p></p><p style=\"padding-top:15px;text-align:center\">" AUTOCONNECT_LINK(COG_24) "</p>"
+//     "</body>"
+//     "</html>";
+//   static const char *wd[7] = { "Sun","Mon","Tue","Wed","Thr","Fri","Sat" };
+//   struct tm *tm;
+//   time_t  t;
+//   char    dateTime[26];
 
-void startPage() {
-  // Retrieve the value of AutoConnectElement with arg function of WebServer class.
-  // Values are accessible with the element name.
-  String  tz = Server.arg("timezone");
+//   t = time(NULL);
+//   tm = localtime(&t);
+//   sprintf(dateTime, "%04d/%02d/%02d(%s) %02d:%02d:%02d.",
+//     tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+//     wd[tm->tm_wday],
+//     tm->tm_hour, tm->tm_min, tm->tm_sec);
+//   content.replace("{{DateTime}}", String(dateTime));
+//   Server.send(200, "text/html", content);
+// }
 
-  for (uint8_t n = 0; n < sizeof(TZ) / sizeof(Timezone_t); n++) {
-    String  tzName = String(TZ[n].zone);
-    if (tz.equalsIgnoreCase(tzName)) {
-      configTime(TZ[n].tzoff * 3600, 0, TZ[n].ntpServer);
-      Serial.println("Time zone: " + tz);
-      Serial.println("ntp server: " + String(TZ[n].ntpServer));
-      break;
-    }
-  }
+// void startPage() {
+//   // Retrieve the value of AutoConnectElement with arg function of WebServer class.
+//   // Values are accessible with the element name.
+//   String  tz = Server.arg("timezone");
 
-  // The /start page just constitutes timezone,
-  // it redirects to the root page without the content response.
-  Server.sendHeader("Location", String("http://") + Server.client().localIP().toString() + String("/"));
-  Server.send(302, "text/plain", "");
-  Server.client().flush();
-  Server.client().stop();
-}
+//   for (uint8_t n = 0; n < sizeof(TZ) / sizeof(Timezone_t); n++) {
+//     String  tzName = String(TZ[n].zone);
+//     if (tz.equalsIgnoreCase(tzName)) {
+//       configTime(TZ[n].tzoff * 3600, 0, TZ[n].ntpServer);
+//       Serial.println("Time zone: " + tz);
+//       Serial.println("ntp server: " + String(TZ[n].ntpServer));
+//       break;
+//     }
+//   }
+
+//   // The /start page just constitutes timezone,
+//   // it redirects to the root page without the content response.
+//   Server.sendHeader("Location", String("http://") + Server.client().localIP().toString() + String("/"));
+//   Server.send(302, "text/plain", "");
+//   Server.client().flush();
+//   Server.client().stop();
+// }
 //////////------------
 //////////////////////////// TASKS FOR EACH CORE //////////////////////////////////
 TaskHandle_t Task1;
@@ -1463,71 +1464,8 @@ void tempread(){
   if (flowtemp1<0){flowtemp1=0;Serial.print(" tempread error (value<0), replacing with 0");}
 }
 
-void readshort(){
-    unsigned long timer1=millis();
-    //long timer2=millis();
-    int flagflow = 0;
-    //flow=0;
-    pulses=0;
-   
-    do{
-        if(digitalRead(bot)==LOW){timer1=millis()+TiempoLectura;digitalWrite(ledgreen,LOW);digitalWrite(ledred,HIGH);}
-        if(digitalRead(flowpin) == LOW){
-          digitalWrite(flowled,LOW);
-          if(flagflow == 0)
-            {
-              Serial.print((int)pulses); Serial.print(" ");     //imprime los pulsos recibidos
-              pulses++;
-              flagflow=1;
-            }
-        }
-        else if(digitalRead(flowpin) == HIGH) {digitalWrite(flowled,HIGH);flagflow=0;}
-      }  
-    while (millis() - timer1 < TiempoLectura ); 
-    
 
-    
-    //if(WiFi.ready()){  
-       // if(Particle.connected && flagonline==0){
-           // publishnow=0;
-          //  Particle.process();
-       // }
-    //}
-}
 
-void flowread(){
-  Serial.print("flowread..");
-   
-    flow=0;
-    for(int i=0;i<multiplos;i++){
-        if (publishnow==0){i=multiplos;Serial.println("i=multiplos!!!!! publica ya!");}
-        readshort(); 
-       // esp_task_wdt_reset();
-        Serial.print(" ");Serial.print(i);Serial.print("/");Serial.print(multiplos);Serial.print(" ");
-        
-        //if(i==10 || i==60 || i==120 || i==180 || i==240 || i==300 || i==360 || i==420|| i==480 || i==540 || i==600 || i==660 || i==720 || i==780 || i==840){
-            //Serial.println("wificheck() desde multiplos");
-            //wificheck();
-     
-        //}
-        
-        if(sensormodel==1){
-            if(                    pulses >= A[0][1]) {flow=flow+    A[0][2] * pulses / A[0][1]          ;}
-            if(pulses >= A[1][1] && pulses < A[0][1]) {flow=flow+    map(pulses,A[1][1],A[0][1],A[1][2],A[0][2]);}
-            if(pulses >= A[2][1] && pulses < A[1][1]) {flow=flow+    map(pulses,A[2][1],A[1][1],A[2][2],A[1][2]);}
-            if(pulses >= A[3][1] && pulses < A[2][1]) {flow=flow+    map(pulses,A[3][1],A[2][1],A[3][2],A[2][2]);}
-            if(pulses >= A[4][1] && pulses < A[3][1]) {flow=flow+    map(pulses,A[4][1],A[3][1],A[4][2],A[3][2]);}
-            if(pulses >  2.0     && pulses < A[4][1]) {flow=flow+    A[4][2]  * pulses /A[4][1];}
-        }
-     // else if(sensormodel==2){
-          
-    // }
-
-    Serial.print(flow); Serial.println(" ");
-    }
-     if(flow<2){flow=0;}
-     flow=flow*calib;       //ajuste calibracion global
-}
 
 void sendData(String params)
 {
@@ -1624,7 +1562,7 @@ void sendData(String params)
   flowtotal = 0;
 }//end senddata
 
-void publicador()
+void publicadorm3tr()
 {
   Serial.println(" publicador");
   digitalWrite(ledred, HIGH);
@@ -1651,6 +1589,116 @@ void publicador()
 } //end publicador
 
 void empaquetador(){       //milis          //promedia las mediciones de cada periodo y publica
+    if (Particle.connected()) {digitalWrite(ledred,LOW); digitalWrite(ledgreen,HIGH);}  
+    if (Particle.disconnected()){ digitalWrite(ledred,HIGH); digitalWrite(ledgreen,LOW); }                     //red
+    if(initialmessages==0){flaginit=1;}                     //publica varias mediciones inicialmente para confirmar llegada de datos a la nube
+    else{flaginit=0; initialmessages--;delay(10000);I1a=I2a=I3a=I4a=I5a=Wh1=Wh2=Wh3=Wh4=Wh5=0;}
+    
+    int periodo = 10000;//antes 9985
+    
+    if((zeit-prezeit) >     1000 * processflag)     { processflag++; Particle.process(); Serial.print("."); }       
+    if((zeit-prezeit) >      periodo   *  2  * publishnow * onetimer)     { onetimer++; wificheck(); }        //cada minuto checa wifi
+    
+    
+    
+    if((zeit-prezeit) >      periodo   *   reportacada * flaginit * publishnow)     {  //cada x milisegundos promedia las mediciones que ha estado agregando a addup() para promediar
+        
+        wificheck();
+        
+        
+        if (variabilidad == 1){wificheck();}
+       
+        processflag=1;
+        onetimer=1;
+        average();              //promedia todas las lecturas realizadas durante el periodo
+        
+        float temp1 = fabs(V1pre-Vrms1);
+        float temp2 = fabs(I1pre-I1a);
+        
+        float temp3 = fabs(V2pre-Vrms2);
+        float temp4 = fabs(I2pre-I2a);
+        
+        float temp5 = fabs(V3pre-Vrms3);
+        float temp6 = fabs(I3pre-I3a);
+        
+        float temp7 = fabs(I4pre-I4a);
+        
+        float temp8 = fabs(I5pre-I5a);
+        
+        
+        if(publishnow==0){
+            Wh1 = Wh1 + Vrms1 * I1a * (zeit-prezeit)/1000/3600  ;
+            Wh2 = Wh2 + Vrms2 * I2a * (zeit-prezeit)/1000/3600  ;
+            Wh3 = Wh3 + Vrms3 * I3a * (zeit-prezeit)/1000/3600  ;
+            Wh4 = Wh4 + Vrms1 * I4a * (zeit-prezeit)/1000/3600  ;
+            Wh5 = Wh5 + Vrms2 * I5a * (zeit-prezeit)/1000/3600  ;
+            publishnow=1;flagpub=2;
+            }
+            else{
+                Wh1 = Wh1 + Vrms1 * I1a * periodo/1000/3600  *reportacada;
+                Wh2 = Wh2 + Vrms2 * I2a * periodo/1000/3600  *reportacada;
+                Wh3 = Wh3 + Vrms3 * I3a * periodo/1000/3600  *reportacada;
+                Wh4 = Wh4 + Vrms1 * I4a * periodo/1000/3600  *reportacada;
+                Wh5 = Wh5 + Vrms2 * I5a * periodo/1000/3600  *reportacada;
+            }
+        
+        //if(config == 12){           Wh4 = Wh4 + Vrms1 * I4a * periodo/1000/3600 *reportacada;  } 
+        //else if(config == 13){      Wh4 = Wh4 + Vrms2 * I4a * periodo/1000/3600 *reportacada;  } 
+        //else if(config == 14){      Wh4 = Wh4 + Vrms3 * I4a * periodo/1000/3600 *reportacada;  } 
+       // else if(config == 15){      Wh4 = Wh4 + Vrms1 * I4a * periodo/1000/3600 *reportacada; Wh5 = Wh5 + Vrms2 * I5a * periodo/1000/3600 *reportacada;  } 
+        
+        //Wh4 = Wh4 + Vrms? * Irms4 * 9985/1000/3600;
+ 
+        if (flagpub!=2){flagpub=0;}//solo en caso de initialmessages (publishnow=0)
+        if(variabilidad==1){
+            byte add=0;
+            
+            if      (temp1 > 3.0) {flagpub++; }             // Volts de variación
+            else if (temp2 > deltai) {flagpub++; digitalWrite(ledgreen,LOW);}      // Amps de variación
+            else     {add=1;}                               // si pasan mas x veces sin reportar cambios, manda medicion de todas formas
+        
+            if      (temp3 > 3.0) {flagpub++; }             // Volts de variación
+            else if (temp4 > deltai) {flagpub++; digitalWrite(ledgreen,LOW);}      // Amps de variación
+            else     {add=1;}                               // si pasan mas x veces sin reportar cambios, manda medicion de todas formas
+        
+            if      (temp5 > 3.0) {flagpub++; }             // Volts de variación
+            else if (temp6 > deltai) {flagpub++; }      // Amps de variación
+            else     {add=1;}                               // si pasan mas x veces sin reportar cambios, manda medicion de todas formas
+        
+            if      (temp7 > deltai) {flagpub++; }             // Volts de variación
+            else if (temp8 > deltai) {flagpub++; }      // Amps de variación
+            else     {add=1;}                               // si pasan mas x veces sin reportar cambios, manda medicion de todas formas
+        
+            if(add==1){flagpubcount++;}
+            if( flagpubcount > maxwait) {flagpub=1; flagpubcount=0; }
+        }//end if variablilidad
+        else {
+            publicador(); flagpubcount=0; Wh1=Wh2=Wh3=Wh4=Wh5=0; 
+        }
+        
+        if (variabilidad == 1){
+            if (flagpub >= 1 || flaginit==0)   
+            {   
+                V1pre=Vrms1; I1pre=I1a; 
+                V2pre=Vrms2; I2pre=I2a;
+                V3pre=Vrms3; I3pre=I3a;
+                I4pre=I4a;
+                I5pre=I5a;
+                flagpub=0;
+                publicador(); flagpubcount=0; Wh1=Wh2=Wh3=Wh4=Wh5=0; 
+            }
+        }
+
+        Vrmsprom1 = Irmsprom1 = Powerprom1 =  0;
+        Vrmsprom2 = Irmsprom2 = Powerprom2 =  0;
+        Vrmsprom3 = Irmsprom3 = Powerprom3 =  0;
+                    Irmsprom4 = Powerprom4 =  0;       //reset variables
+                    Irmsprom5 = Powerprom5 =  0;
+        prezeit=zeit;    //reset tiempo de 1 seg
+    }//end if
+}//end empaquetador
+
+void empaquetadorm3tr(){       //milis          //promedia las mediciones de cada periodo y publica
   Serial.print("empaquetador ");
   int flaginit=0;
 
@@ -1718,6 +1766,855 @@ void empaquetador(){       //milis          //promedia las mediciones de cada pe
   Serial.println(" end empaquetador ");
 }//end empaquetador
 
+void area(){
+    //en lugar de obtener unicamente max y min, se calcula el area bajo las curvas de corriente ya que no siempre siguen una forma senoidal y pueden generar resultados erroneos.
+    iarea1=iarea2=iarea3=iarea4=iarea5=0;
+    
+    for(unsigned int m=0;m<resolution;m++){
+     long istep=0;
+     
+     //ojo para reducir "ruido" de corrientes pequenas, probar quitando la resistencia de 1M ohm entre el pin analigico del photon que mide las corrientes y tambien probar aumentar el  if (istep<2){istep=0;} a  istep< 3 o 4
+     
+     istep=u[m]-2048; istep=abs(istep);  if (istep<atenuacion){istep=0;} iarea1=iarea1+istep;
+     istep=v[m]-2048; istep=abs(istep);  if (istep<atenuacion){istep=0;} iarea2=iarea2+istep;
+     istep=w[m]-2048; istep=abs(istep);  if (istep<atenuacion){istep=0;} iarea3=iarea3+istep;
+     istep=t[m]-2048; istep=abs(istep);  if (istep<atenuacion){istep=0;} iarea4=iarea4+istep;
+     istep=s[m]-2048; istep=abs(istep);  if (istep<atenuacion){istep=0;} iarea5=iarea5+istep;
+    }
+}//end area
+
+void sync1(){               //este syn sirve muy bien, solo falta ajustarlo para que empiece mas cerca de 2048 o bien hacer el analisis de power factor buscando el valor de 2048 y a partir de aho hacer el conteo de cursor.
+    //Serial.println("-1-");
+    byte dowhile = 0;
+    byte go=0;
+    syncstatus1=0;   
+    prezeitsync=micros();
+    do
+    {
+        //Serial.println("go1");
+        while(go==0){
+            int ramp=0;
+            while(ramp<100){
+                //Serial.println(ramp);
+                analogread = analogRead(A0);
+                if(analogread>1800 && analogread<2000){ramp=101;}
+                else {ramp++;}
+                
+                zeitsync=micros();
+                if((zeitsync-prezeitsync) > 30000) { dowhile=1; ramp=102; go=1; syncstatus1=2;}//syncstatus=2 significa que no pudo sincronizarse
+            }
+            
+            if(ramp==101){
+                int temporal = analogRead(A0);    
+                if(temporal>analogread){
+                    go=1;
+                    dowhile=1;
+                    syncstatus1=1;              //syncstatus=1 significa que si pudo sincronizarse
+                    //Serial.println("!1");
+                }
+                else 
+                {
+                    delay(5);    
+                }
+            }//END IF
+        }//end while ramp
+    } while(dowhile == 0);
+}//end sync1
+void sync2(){               //este syn sirve muy bien, solo falta ajustarlo para que empiece mas cerca de 2048 o bien hacer el analisis de power factor buscando el valor de 2048 y a partir de aho hacer el conteo de cursor.
+    //Serial.println("-2-");
+    byte dowhile = 0;
+    byte go=0;
+    syncstatus2=0;   
+    prezeitsync=micros();
+    do
+    {
+        //Serial.println("go2");
+        while(go==0){
+            int ramp=0;
+            while(ramp<100){
+                //Serial.println(ramp);
+                analogread = analogRead(A1);
+                if(analogread>1800 && analogread<2000){ramp=101;}
+                else {ramp++;}
+                
+                zeitsync=micros();
+                if((zeitsync-prezeitsync) > 30000) { dowhile=1; ramp=102; go=1; syncstatus2=2;}//syncstatus=2 significa que no pudo sincronizarse
+            }
+            
+            if(ramp==101){
+                int temporal = analogRead(A1);    
+                if(temporal>analogread){
+                    go=1;
+                    dowhile=1;
+                    syncstatus2=1;              //syncstatus=1 significa que si pudo sincronizarse
+                    //Serial.println("!2");
+                }
+                else 
+                {
+                    delay(5);    
+                }
+            }//END IF
+        }//end while ramp
+    } while(dowhile == 0);
+}//end sync2
+void sync3(){               //este syn sirve muy bien, solo falta ajustarlo para que empiece mas cerca de 2048 o bien hacer el analisis de power factor buscando el valor de 2048 y a partir de aho hacer el conteo de cursor.
+    //Serial.println("-3-");
+    byte dowhile = 0;
+    byte go=0;
+    syncstatus3=0;   
+    prezeitsync=micros();
+    do
+    {
+        //Serial.println("go3");
+        while(go==0){
+            int ramp=0;
+            while(ramp<100){
+                //Serial.println(ramp);
+                analogread = analogRead(A2);
+                if(analogread>1800 && analogread<2000){ramp=101;}
+                else {ramp++;}
+                
+                zeitsync=micros();
+                if((zeitsync-prezeitsync) > 30000) { dowhile=1; ramp=102; go=1; syncstatus3=2;}//syncstatus=2 significa que no pudo sincronizarse
+            }
+            
+            if(ramp==101){
+                int temporal = analogRead(A2);    
+                if(temporal>analogread){
+                    go=1;
+                    dowhile=1;
+                    syncstatus3=1;              //syncstatus=1 significa que si pudo sincronizarse
+                    //Serial.println("!3");
+                }
+                else 
+                {
+                    delay(5);    
+                }
+            }//END IF
+        }//end while ramp
+    } while(dowhile == 0);
+}//end sync3
+void sync4(){               //este syn sirve muy bien, solo falta ajustarlo para que empiece mas cerca de 2048 o bien hacer el analisis de power factor buscando el valor de 2048 y a partir de aho hacer el conteo de cursor.
+    //Serial.println("-3-");
+    byte dowhile = 0;
+    byte go=0;
+    syncstatus4=0;   
+    prezeitsync=micros();
+    do
+    {
+        //Serial.println("go3");
+        while(go==0){
+            int ramp=0;
+            while(ramp<100){
+                //Serial.println(ramp);
+                analogread = analogRead(A0);
+                if(analogread>1800 && analogread<2000){ramp=101;}
+                else {ramp++;}
+                
+                zeitsync=micros();
+                if((zeitsync-prezeitsync) > 30000) { dowhile=1; ramp=102; go=1; syncstatus4=2;}//syncstatus=2 significa que no pudo sincronizarse
+            }
+            
+            if(ramp==101){
+                int temporal = analogRead(A0);    
+                if(temporal>analogread){
+                    go=1;
+                    dowhile=1;
+                    syncstatus4=1;              //syncstatus=1 significa que si pudo sincronizarse
+                    //Serial.println("!3");
+                }
+                else 
+                {
+                    delay(5);    
+                }
+            }//END IF
+        }//end while ramp
+    } while(dowhile == 0);
+}//end sync3
+void sync5(){               //este syn sirve muy bien, solo falta ajustarlo para que empiece mas cerca de 2048 o bien hacer el analisis de power factor buscando el valor de 2048 y a partir de aho hacer el conteo de cursor.
+    //Serial.println("-3-");
+    byte dowhile = 0;
+    byte go=0;
+    syncstatus5=0;   
+    prezeitsync=micros();
+    do
+    {
+        //Serial.println("go3");
+        while(go==0){
+            int ramp=0;
+            while(ramp<100){
+                //Serial.println(ramp);
+                analogread = analogRead(A1);
+                if(analogread>1800 && analogread<2000){ramp=101;}
+                else {ramp++;}
+                
+                zeitsync=micros();
+                if((zeitsync-prezeitsync) > 30000) { dowhile=1; ramp=102; go=1; syncstatus5=2;}//syncstatus=2 significa que no pudo sincronizarse
+            }
+            
+            if(ramp==101){
+                int temporal = analogRead(A1);    
+                if(temporal>analogread){
+                    go=1;
+                    dowhile=1;
+                    syncstatus5=1;              //syncstatus=1 significa que si pudo sincronizarse
+                    //Serial.println("!3");
+                }
+                else 
+                {
+                    delay(5);    
+                }
+            }//END IF
+        }//end while ramp
+    } while(dowhile == 0);
+}//end sync3
+void sync6(){               //este syn sirve muy bien, solo falta ajustarlo para que empiece mas cerca de 2048 o bien hacer el analisis de power factor buscando el valor de 2048 y a partir de aho hacer el conteo de cursor.
+    //Serial.println("-3-");
+    byte dowhile = 0;
+    byte go=0;
+    syncstatus6=0;   
+    prezeitsync=micros();
+    do
+    {
+        //Serial.println("go3");
+        while(go==0){
+            int ramp=0;
+            while(ramp<100){
+                //Serial.println(ramp);
+                analogread = analogRead(A2);
+                if(analogread>1800 && analogread<2000){ramp=101;}
+                else {ramp++;}
+                
+                zeitsync=micros();
+                if((zeitsync-prezeitsync) > 30000) { dowhile=1; ramp=102; go=1; syncstatus6=2;}//syncstatus=2 significa que no pudo sincronizarse
+            }
+            
+            if(ramp==101){
+                int temporal = analogRead(A2);    
+                if(temporal>analogread){
+                    go=1;
+                    dowhile=1;
+                    syncstatus6=1;              //syncstatus=1 significa que si pudo sincronizarse
+                    //Serial.println("!3");
+                }
+                else 
+                {
+                    delay(5);    
+                }
+            }//END IF
+        }//end while ramp
+    } while(dowhile == 0);
+}//end sync3
+
+void maxmin(){
+    vmax1=vmax2=vmax3=0; 
+    vmax4=vmax5=vmax6=0; 
+    imax1=imax2=imax3=imax4=imax5=0; 
+   
+    vmin1=vmin2=vmin3=5000;
+    vmin4=vmin5=vmin6=5000;
+    imin1=imin2=imin3=imin4=imin5=5000;
+    
+    //ojo, ya no se necesita calcular max/min de las corrientes porque ahora se hace con area...
+   
+    
+    for(unsigned int m=0;m<resolution;m++){
+      vmax1=max(x[m],vmax1);
+      vmin1=min(x[m],vmin1);
+      vmax2=max(y[m],vmax2);
+      vmin2=min(y[m],vmin2);
+      vmax3=max(z[m],vmax3);
+      vmin3=min(z[m],vmin3);
+      
+      vmax4=max(xx[m],vmax4);
+      vmin4=min(xx[m],vmin4);
+      vmax5=max(yy[m],vmax5);
+      vmin5=min(yy[m],vmin5);
+      vmax6=max(zz[m],vmax6);
+      vmin6=min(zz[m],vmin6);
+      
+      imax1=max(u[m],imax1);    
+      imax2=max(v[m],imax2);    
+      imax3=max(w[m],imax3);   
+      imax4=max(t[m],imax4);    
+      imax5=max(s[m],imax5);    
+      
+      imin1=min(u[m],imin1);    
+      imin2=min(v[m],imin2);    
+      imin3=min(w[m],imin3);   
+      imin4=min(t[m],imin4);   
+      imin5=min(s[m],imin5);   
+    }
+}//end maxmin1
+
+void powerfactor(){
+   // Serial.println("ppowerfactor");
+    int pfable1=0;
+    int pfable2=0;
+    int pfable3=0;
+    int pfable4=0;
+    int pfable5=0;
+    int m=0;
+    int n=0;
+    cursorv1=cursori1=cursorv2=cursori2=cursorv3=cursori3=cursori4=cursori5=cursorv1_=cursorv2_=cursorv3_=0;
+    //pf1=pf2=pf3=pf4=pf5=1.01;
+
+    // if(syncstatus1==1 && vmax1 > 2200 && vmin1 < 1900 && imax1 > 2055  &&  imin1 < 2040) { pfable1=1; }       //si hay suficiente amplitud en las curvas y sync funciono bien
+    // if(syncstatus2==1 && vmax2 > 2200 && vmin2 < 1900 && imax2 > 2055  &&  imin2 < 2040) { pfable2=1; }
+    // if(syncstatus3==1 && vmax3 > 2200 && vmin3 < 1900 && imax3 > 2055  &&  imin3 < 2040) { pfable3=1; }
+    // if(syncstatus4==1 && vmax4 > 2200 && vmin4 < 1900 && imax4 > 2055  &&  imin4 < 2040) { pfable4=1; }         //config=15
+    // if(syncstatus5==1 && vmax5 > 2200 && vmin5 < 1900 && imax5 > 2055  &&  imin5 < 2040) { pfable5=1; }         //config=15
+    
+    if(syncstatus1==1)  { pfable1=1; }       //si hay suficiente amplitud en las curvas y sync funciono bien
+    if(syncstatus2==1)  { pfable2=1; }
+    if(syncstatus3==1)  { pfable3=1; }
+    if(syncstatus4==1)  { pfable4=1; }         //config=15
+    if(syncstatus5==1)  { pfable5=1; }         //config=15
+    //if(syncstatus6==1 && vmax6 > 2200 && vmin6 < 1900 && imax5 > 2055  &&  imin5 < 2040) { pfable6=1; }   //buga no se si sea imax 5 y imin5
+    
+    
+     //para calcular power factor:
+    if(pfable1==1){
+        m=0; cursorv1=0;
+        while(x[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
+        while(x[m]>2048){ cursorv1++; m++; }            //cuenta las mediciones que sean mayores a 2048, deberian ser aprox 47 o resolution/2
+       // Serial.print(" cursorv1: ");Serial.print(cursorv1);Serial.print(" m= ");Serial.println(m);
+        n=0; cursori1=0;
+        while(u[n]<2048){ n++; }                        //descarta valores iniciales menores a 2048
+        while(u[n]>2048){ cursori1++; n++; }
+        //Serial.print("cursori1: ");Serial.print(cursori1);Serial.print(" n= ");Serial.println(n);
+      
+        // if(m>40 && m<60 && abs(m-n)<15){
+        //     float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+        //     pf1 = cos(pfactor);Serial.print("pf1: ");Serial.print(pf1);
+        // }
+        
+       // if(m>40 && m<60){
+            float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+            pf1 = cos(pfactor);Serial.print("pf1: ");Serial.print(pf1);
+       // }
+        
+        
+ 
+
+        //debugging power factor: temporal
+         Serial.println("");
+        for(int i=0;i<resolution;i++)
+        {
+            Serial.print(x[i]);Serial.print(",");
+        }
+        Serial.println("");
+        
+        for(int i=0;i<resolution;i++)
+        {
+            Serial.print(u[i]);Serial.print(",");
+        }
+        Serial.println("");
+        
+    }
+    //ojo, falta decidir que mostrar si pfableX==0
+    
+    
+    //voltaje 2 y corriente 2
+    if(pfable2==1){
+        m=0;
+        while(y[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
+     //   Serial.print("m= ");Serial.println(m); 
+        while(y[m]>2048){ cursorv2++; m++; }            //cuenta las mediciones que sean mayores a 2048, deberian ser aprox 47 o resolution/2
+        n=0;
+        while(v[n]<2048){ n++; }                        //descarta valores iniciales menores a 2048
+      //  Serial.print("m= ");Serial.println(m); 
+        while(v[n]>2048){ cursori2++; n++; }            //cuenta las mediciones que sean mayores a 2048, dependiendo del desfase sera mayor o menor a 47
+        // if(m>40 && m<60 && abs(m-n)<15){
+        //     float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+        //     pf2 = cos(pfactor);Serial.print(" pf2: ");Serial.print(pf2);
+        // }
+        
+        
+        if(m>40 && m<60 ){
+            float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+            pf2 = cos(pfactor);Serial.print(" pf2: ");Serial.print(pf2);
+        }
+        
+    }
+
+
+    //voltaje 3 y corriente 3
+    if(pfable3==1){
+        m=0;
+        while(z[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
+     //   Serial.print("m= ");Serial.println(m); 
+        while(z[m]>2048){ cursorv3++; m++; }            //cuenta las mediciones que sean mayores a 2048, deberian ser aprox 47 o resolution/2
+        n=0;
+        while(w[n]<2048){ n++; }                        //descarta valores iniciales menores a 2048
+     //   Serial.print("m= ");Serial.println(m); 
+        while(w[n]>2048){ cursori3++; n++; }            //cuenta las mediciones que sean mayores a 2048, dependiendo del desfase sera mayor o menor a 47
+        // if((m-n)<15){
+        //     float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+        //     pf3 = cos(pfactor);Serial.print(" pf3: ");Serial.print(pf3);
+        // }
+        
+            
+            float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+            pf3 = cos(pfactor);Serial.print(" pf3: ");Serial.print(pf3);
+        
+    }
+
+
+
+
+    if(config==15){
+        if(pfable4==1){
+            m=0;
+            while(xx[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
+         //   Serial.print("m= ");Serial.println(m); 
+            while(xx[m]>2048){ cursorv1_++; m++; }    
+            n=0;
+            while(t[n]<2048){ n++; }          // t o s?             //descarta valores iniciales menores a 2048
+          //  Serial.print("m= ");Serial.println(m); 
+            while(t[n]>2048){ cursori4++; n++; } 
+            if((m-n)<15){
+                float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+                pf4 = cos(pfactor);Serial.print(" pf4: ");Serial.print(pf4);
+            }
+        }
+
+        
+        if(pfable5==1){
+            m=0;
+            while(yy[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
+         //   Serial.print("m= ");Serial.println(m); 
+            while(yy[m]>2048){ cursorv2_++; m++; }    
+            n=0;
+            while(s[n]<2048){ n++; }          // t o s?             //descarta valores iniciales menores a 2048
+          //  Serial.print("m= ");Serial.println(m); 
+            while(s[n]>2048){ cursori5++; n++; } 
+            if((m-n)<15){
+                float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+                pf5 = cos(pfactor);Serial.print(" pf5: ");Serial.println(pf5);
+            }
+        }
+    }
+    
+    
+    
+    if(config==17){
+        if(pfable4==1){
+            m=0;
+            while(yy[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
+         //   Serial.print("m= ");Serial.println(m); 
+            while(yy[m]>2048){ cursorv2_++; m++; }    
+            n=0;
+            while(t[n]<2048){ n++; }          // t o s?             //descarta valores iniciales menores a 2048
+          //  Serial.print("m= ");Serial.println(m); 
+            while(t[n]>2048){ cursori4++; n++; } 
+            if((m-n)<15){
+                float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+                pf4 = cos(pfactor);Serial.print(" pf4: ");Serial.print(pf4);
+            }
+        }
+
+        
+        if(pfable5==1){
+            m=0;
+            while(zz[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
+         //   Serial.print("m= ");Serial.println(m); 
+            while(zz[m]>2048){ cursorv3_++; m++; }    
+            n=0;
+            while(s[n]<2048){ n++; }          // t o s?             //descarta valores iniciales menores a 2048
+          //  Serial.print("m= ");Serial.println(m); 
+            while(s[n]>2048){ cursori5++; n++; } 
+            if((m-n)<15){
+                float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+                pf5 = cos(pfactor);Serial.print(" pf5: ");Serial.println(pf5);
+            }
+        }
+    }
+    
+    
+    
+}//end powerfactor
+
+void readcycle(){
+    
+
+    
+    
+    
+    // pinMode(A3, INPUT_PULLDOWN);                 //I5
+    // pinMode(A4, INPUT_PULLDOWN);                 //I1 antes 4
+    // pinMode(A5, INPUT_PULLDOWN);                 //I2 antes 3
+    // pinMode(A6, INPUT_PULLDOWN);                 //I3 antes 2
+    // pinMode(A7, INPUT_PULLDOWN);                 //I4 antes 1
+    
+    
+    switch(config){
+      case 1:          //f1 y c1            
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);    
+            u[r] = analogRead(I1); 
+            y[r] = z[r] = v[r] = w[r] = t[r] = s[r] = 2048;
+          }
+      break;
+
+      case 2:           //f1 y c1, luego lee f1 y c2
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);    
+            u[r] = analogRead(I1);
+          }
+          sync1();
+          for(unsigned int r=0; r<resolution; r++){
+            xx[r] = analogRead(V1);
+            v[r] = analogRead(I2);
+          }
+      break;
+      
+      case 5:           //f1 y c1, luego lee f1 y c2
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);    
+            u[r] = analogRead(I1);
+          }
+          sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);    
+            v[r] = analogRead(I2);
+          }
+          sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);    
+            w[r] = analogRead(I3);
+          }
+          sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);    
+            t[r] = analogRead(I4);
+          }
+          sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);    
+            s[r] = analogRead(I5);
+          }
+
+      break;
+
+      case 6:          //f1 y c1, f2 y c2
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);
+            u[r] = analogRead(I1);
+          }
+        sync2();
+        for(unsigned int r=0; r<resolution; r++){
+            y[r] = analogRead(V2);
+            v[r] = analogRead(I2);
+          }
+      break;
+
+      case 7:          //f1->c1, f2->c2, c3=generador ligado a f1
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);
+            u[r] = analogRead(I1);
+          }
+        sync2();
+        for(unsigned int r=0; r<resolution; r++){
+            y[r] = analogRead(V2);
+            v[r] = analogRead(I2);
+          }
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            xx[r] = analogRead(V1);
+            w[r] = analogRead(I3);
+          }
+      break;
+
+      case 8:         //f1->c1, f2->c2, c3=generador ligado a f2
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);
+            u[r] = analogRead(I1);
+          }
+        sync2();
+        for(unsigned int r=0; r<resolution; r++){
+            y[r] = analogRead(V2);
+            v[r] = analogRead(I2);
+          }
+        sync2();
+        for(unsigned int r=0; r<resolution; r++){
+            xx[r] = analogRead(V2);
+            w[r] = analogRead(I3);
+          }
+      break;
+
+      case 11:             //f1->c1, f2->c2, f3->c3
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);
+            u[r] = analogRead(I1);
+          }
+        sync2();
+        for(unsigned int r=0; r<resolution; r++){
+            y[r] = analogRead(V2);
+            v[r] = analogRead(I2);
+          }
+        sync3();
+        for(unsigned int r=0; r<resolution; r++){
+            z[r] = analogRead(V3);
+            w[r] = analogRead(I3);
+          }
+      break;
+
+      case 12:            //f1->c1, f2->c2, f3->c3, c4=generador ligado a f1
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);
+            u[r] = analogRead(I1);
+          }
+        sync2();
+        for(unsigned int r=0; r<resolution; r++){
+            y[r] = analogRead(V2);
+            v[r] = analogRead(I2);
+          }
+        sync3();
+        for(unsigned int r=0; r<resolution; r++){
+            z[r] = analogRead(V3);
+            w[r] = analogRead(I3);
+          }
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            xx[r] = analogRead(V1);
+            t[r] = analogRead(I4);
+          }
+      break;
+      case 13:             //f1->c1, f2->c2, f3->c3, c4=generador ligado a f2
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);
+            u[r] = analogRead(I1);
+          }
+        sync2();
+        for(unsigned int r=0; r<resolution; r++){
+            y[r] = analogRead(V2);
+            v[r] = analogRead(I2);
+          }
+        sync3();
+        for(unsigned int r=0; r<resolution; r++){
+            z[r] = analogRead(V3);
+            w[r] = analogRead(I3);
+          }
+        sync2();
+        for(unsigned int r=0; r<resolution; r++){
+            yy[r] = analogRead(V2);
+            t[r] = analogRead(I4);
+          }
+      break;
+      case 14:             //f1->c1, f2->c2, f3->c3, c4=generador ligado a f3
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);
+            u[r] = analogRead(I1);
+          }
+        sync2();
+        for(unsigned int r=0; r<resolution; r++){
+            y[r] = analogRead(V2);
+            v[r] = analogRead(I2);
+          }
+        sync3();
+        for(unsigned int r=0; r<resolution; r++){
+            z[r] = analogRead(V3);
+            w[r] = analogRead(I3);
+          }
+        sync3();
+        for(unsigned int r=0; r<resolution; r++){
+            zz[r] = analogRead(V3);
+            t[r] = analogRead(I4);
+          }
+      break;
+       case 15:             //f1->c1, f2->c2, f3->c3,     c4 a f1, c5 a f2
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1); //Serial.print(u[r]);  Serial.print(" "); 
+            u[r] = analogRead(I1);
+          }
+          
+          ///////
+          //Serial.print(" L1:   "); 
+          for(unsigned int r=0; r<resolution; r++){
+          //Serial.print(x[r]);  Serial.print(","); 
+          }
+          //Serial.println(" "); 
+          //-------
+          
+           //Serial.print(" I1:   "); 
+          for(unsigned int r=0; r<resolution; r++){
+          // Serial.print(u[r]);  Serial.print(","); 
+          }
+         // Serial.println(" "); 
+          ///////
+          
+          
+        sync2();
+        for(unsigned int r=0; r<resolution; r++){
+            y[r] = analogRead(V2);
+            v[r] = analogRead(I2);
+          }
+          
+          ///////
+          //Serial.print(" L2:   "); 
+          //for(unsigned int r=0; r<resolution; r++){
+          // Serial.print(y[r]);  Serial.print(","); 
+         // }
+         // Serial.println(" "); 
+          
+           //-------
+          
+          //Serial.print(" I2:   "); 
+          for(unsigned int r=0; r<resolution; r++){
+          // Serial.print(v[r]);  Serial.print(","); 
+          }
+          //Serial.println(" "); 
+          ///////
+        sync3();
+        for(unsigned int r=0; r<resolution; r++){
+            z[r] = analogRead(V3);
+            w[r] = analogRead(I3);
+          }
+          ///////
+        //  Serial.print(" L3:   "); 
+        //  for(unsigned int r=0; r<resolution; r++){
+      //     Serial.print(z[r]);  Serial.print(","); 
+      //    }
+      //    Serial.println(" "); 
+          
+           ///////
+          
+         
+        sync4();
+        for(unsigned int r=0; r<resolution; r++){
+            xx[r] = analogRead(V1);
+            t[r] = analogRead(I4);
+          }
+         sync5();
+        for(unsigned int r=0; r<resolution; r++){
+            yy[r] = analogRead(V2);
+            s[r] = analogRead(I5);
+          }
+      break;
+       case 16:             //f1->c1, f2->c2, f3->c3,       c4 a f1, c5 a f3
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);
+            u[r] = analogRead(I1);
+          }
+        sync2();
+        for(unsigned int r=0; r<resolution; r++){
+            y[r] = analogRead(V2);
+            v[r] = analogRead(I3);
+          }
+        sync3();
+        for(unsigned int r=0; r<resolution; r++){
+            z[r] = analogRead(V3);
+            w[r] = analogRead(I3);
+          }
+        sync4();
+        for(unsigned int r=0; r<resolution; r++){
+            xx[r] = analogRead(V1);
+            t[r] = analogRead(I4);
+          }
+          sync6();
+        for(unsigned int r=0; r<resolution; r++){
+            zz[r] = analogRead(V3);
+            s[r] = analogRead(I5);
+          }
+      break;
+       case 17:             //f1->c1, f2->c2, f3->c3,           c4 a f2, c5 a f3
+        sync1();
+        for(unsigned int r=0; r<resolution; r++){
+            x[r] = analogRead(V1);
+            u[r] = analogRead(I1);
+          }
+        sync2();
+        for(unsigned int r=0; r<resolution; r++){
+            y[r] = analogRead(V2);
+            v[r] = analogRead(I2);
+          }
+        sync3();
+        for(unsigned int r=0; r<resolution; r++){
+            z[r] = analogRead(V3);
+            w[r] = analogRead(I3);
+          }
+        sync5();
+        for(unsigned int r=0; r<resolution; r++){
+            yy[r] = analogRead(V2);
+            t[r] = analogRead(I4);
+          }
+           sync6();
+        for(unsigned int r=0; r<resolution; r++){
+            zz[r] = analogRead(V3);
+            s[r] = analogRead(I5);
+          }
+      break;
+
+    }//end switch
+}//end readcycle
+
+void addup(){
+    Vrmsprom1=Vrmsprom1+Vrms1;             //cada paso por loop haz otra medicion y sumala a la anterior, al final cuando se termine el timer para pubnub se divide entre el total de medicones
+    Irmsprom1=Irmsprom1+I1a;
+    Powerprom1=Powerprom1+Power1;
+                Imax1prom=Imax1prom+imax1;
+                Imin1prom=Imin1prom+imin1;
+    if(pf1!=0){pfactorprom1=pfactorprom1+pf1;  pf1add++;   }
+
+    Vrmsprom2=Vrmsprom2+Vrms2;             //cada paso por loop haz otra medicion y sumala a la anterior, al final cuando se termine el timer para pubnub se divide entre el total de medicones
+    Irmsprom2=Irmsprom2+I2a;
+    Powerprom2=Powerprom2+Power2;
+                Imax2prom=Imax2prom+imax2;
+                Imin2prom=Imin2prom+imin2;
+    if(pf2!=0){pfactorprom2=pfactorprom2+pf2;  pf2add++;   }
+
+    Vrmsprom3=Vrmsprom3+Vrms3;             //cada paso por loop haz otra medicion y sumala a la anterior, al final cuando se termine el timer para pubnub se divide entre el total de medicones
+    Irmsprom3=Irmsprom3+I3a;
+    Powerprom3=Powerprom3+Power3;
+                Imax3prom=Imax3prom+imax3;
+                Imin3prom=Imin3prom+imin3;
+     if(pf3!=0){pfactorprom3=pfactorprom3+pf3;  pf3add++;   }
+
+    if(config == 12 || config == 13 || config == 14){
+      Irmsprom4=Irmsprom4+I4a;
+      Powerprom4=Powerprom4+Power4;
+      //pfactorprom4=pfactorprom4+pfactor4;
+    }
+     if(config == 15 || config == 16 || config == 17){
+      Irmsprom4=Irmsprom4+I4a;
+      Powerprom4=Powerprom4+Power4;
+                Imax4prom=Imax4prom+imax4;
+                Imin4prom=Imin4prom+imin4;
+       if(pf4!=0){pfactorprom4=pfactorprom4+pf4;  pf4add++;   }
+      
+      Irmsprom5=Irmsprom5+I5a;
+      Powerprom5=Powerprom5+Power5;
+                Imax5prom=Imax5prom+imax5;
+                Imin5prom=Imin5prom+imin5;
+       if(pf5!=0){pfactorprom5=pfactorprom5+pf5;  pf5add++;   }
+    }
+    p++;
+
+}  //end addup             //realiza varias lecturas por segundo y suma los resultados para ser promediados despues
+
+void gather(){
+    
+    readcycle();                        
+    maxmin(); 
+    area();
+    powerfactor();
+    addup();
+}
+
+
 void Task2code( void * pvParameters ){
   Serial.print("Task2 running on core ");
   Serial.println(xPortGetCoreID());
@@ -1730,10 +2627,15 @@ void Task2code( void * pvParameters ){
     Serial.println("----------core 1-----------");
     vbatcheck();
     zeit=millis();                  //timer para guardar dato o publicar
-    flowread();
-    empaquetador();
+   
+
+  //xoc
+    gather();                      //realiza aprox 94 mediciones de voltaje y corriente, procesa y calcula v, i, pf de cada fase
+    power();                        //procesa y filtra el array para obtener Voltaje, Corriente, Potencia y factor de potencia
+    addup();                        //realiza y suma tantas mediciones como pueda durante el intervalo entre cada periodo de registro
+    empaquetador();                 //promedia las mediciones de cada intervalo y publica si cumple los criterios
     buttoncheck();
-    ////esp_task_wdt_reset();
+   //end xoc
   }
 }
 
@@ -1824,9 +2726,9 @@ int x=M3TRver;
 Serial.println("OTA ___ M3TR ID: " + String(M3TR_unique_id)+" , version: "+  String(x));
 
 //String bin = "/firmware" + String(version + 1) + ".bin";
-String bin = "/firmware" + String(M3TR_unique_id) +"."+  String(x + 1) + ".bin";
+String bin = "/firmware" + String(M3TR_unique_id) +"."+  String(x + 1) + ".bin"; //ejemplo: firmware4.9.bin
 Serial.print("Looking for version: ");
-Serial.println(String(x + 1) +"on firmware: "+ bin);
+Serial.println(String(x + 1) +"on firmware: "+ bin); 
 
 //OTA.update("/G0_firmware_v1.3.bin");
 OTA.update(bin);
@@ -2070,10 +2972,3 @@ void loop()
 //falta hacer backup de version estable
 //falta cuando el internet esta malo no hace bien los backups offline y no se recupera.
 
-
-
-////para xoc temporal:
-//https://script.google.com/macros/s/AKfycbz_pcCj8ovohrlNnCZdJ2IwtwzR-uG23ejIsSIlm56_a1PpTMLy/exec?Timestamp_Device=123&config_id=2&flow=3312&tempIN=10&tempOUT=1&vbat=5
-      
-
-  //    https://script.google.com/macros/s/AKfycby56JtxUobTkE-RPaXZZ4oPHk6Bu8PTITCvI-798_7Q9JDnnDwdq81HVv4HejCIPh2jvw/exec?Timestamp_Device=123&xocsheet=0&device_id=3312&config=10&counterstatus=1&V1=5&I1=5&pf1=5&Wh1=5&V2=5&I2=5&pf2=5&Wh2=5&V3=5&I4=5&pf3=5&Wh3=5&I4=5&pf4=5&Wh4=5&I5=5&pf5=5&Wh5=5
