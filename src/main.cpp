@@ -6,424 +6,1757 @@
 
 //watchdog: https://iotassistant.io/esp32/enable-hardware-watchdog-timer-esp32-arduino-ide/
 
-//#include "autoconnect_stuff.h"
-#include <WiFiClientSecure.h>
-//#include <MQTTClient.h>
-//#include <NTPClient.h>
-//#include "WiFi.h"
-//#include <WiFiUdp.h>
-//#include <SPI.h>
-//#include <LoRa.h>
-/////#include <time.h>
-//#include <AutoConnect.h>
-//#include <WebServer.h>
+#include <Arduino.h>
+#include <WiFi.h>
+#include <time.h>
+#include <SPI.h>
+#include <LoRa.h>
+#include <math.h>
+//#include <ESP32Ping.h> 
+#include <Preferences.h>
+Preferences preferences;
 #include <HardwareSerial.h>
 HardwareSerial atSerial(1);
 
-#include <OneWire.h>
-#include <DS18B20.h>
 
-#define ONE_WIRE_BUS 15
-
-OneWire oneWire(ONE_WIRE_BUS);
-DS18B20 sensor(&oneWire);
-
-
-const uint ServerPort = 23;
-WiFiServer Serverx(ServerPort);
-WiFiClient RemoteClient;
-
-
-
-
-#include "certs.h"
-#include "configs.h"
-//#include <autoconnect_stuff.h>
-
-
-#include <NTPClient.h> //updatetime
-#include <Arduino.h>
-#if defined(ARDUINO_ARCH_ESP8266)
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
-#elif defined(ARDUINO_ARCH_ESP32)
-#include <WiFi.h>
-#include <WebServer.h>
-#endif
-#include <time.h>
-#include <AutoConnect.h>
 #include "helpers/OTAClient.h"
 OTAClient OTA;
+//#include "helpers/wifi.h"
+#include "configs.h"
+#include "certs.h"
+#include <DNSServer.h>
+#include <AsyncTCP.h>
+#include "ESPAsyncWebServer.h"
+#include <ESP32Ping.h>
 
-
-#include <ESP32Ping.h>  //to check if there is internet, not only wifi
-//#include <esp_task_wdt.h>   //watchdog
-
-#include <EEPROM.h>   //para guardar la fecha si se traba
-#define EEPROM_SIZE 10
-byte timebackup=0;
-
-
+//#include "helpers/OTAClient.h"
+//OTAClient OTA;
+//#include "helpers/wifi.h"
+//#include "helpers/updateCurrentTime.h"
+//#include "helpers/adc.h"
+//#include "helpers/analysis.h"
+//#include "helpers/prepare.h"
+#include <NTPClient.h> //updatetime
 WiFiUDP ntpUDP;
-//WiFiClientSecure net = WiFiClientSecure();
-//MQTTClient client = MQTTClient(256);
 NTPClient timeClient(ntpUDP);
+unsigned long currentTime;
+unsigned long offlinedrift;
+
+unsigned long period;
+unsigned long zeit,prezeit;
+unsigned long millispre;
+const int BACKUPSIZE=200;
+unsigned long currenttimearray[BACKUPSIZE];
+float payloadbag[BACKUPSIZE][55];
+
+ unsigned long tiempoa;
+  unsigned long tiempob;
+   unsigned long deltat;
 
 
-
-
-
-static const char AUX_TIMEZONE[] PROGMEM = R"(
-{
-  "title": "TimeZone",
-  "uri": "/timezone",
-  "menu": true,
-  "element": [
-    {
-      "name": "caption",
-      "type": "ACText",
-      "value": "Sets the time zone to get the current local time.",
-      "style": "font-family:Arial;font-weight:bold;text-align:center;margin-bottom:10px;color:DarkSlateBlue"
-    },
-    {
-      "name": "timezone",
-      "type": "ACSelect",
-      "label": "Select TZ name",
-      "option": [],
-      "selected": 10
-    },
-    {
-      "name": "newline",
-      "type": "ACElement",
-      "value": "<br>"
-    },
-    {
-      "name": "start",
-      "type": "ACSubmit",
-      "value": "OK",
-      "uri": "/start"
-    }
-  ]
-}
-)";
-
-typedef struct {
-  const char* zone;
-  const char* ntpServer;
-  int8_t      tzoff;
-} Timezone_t;
-
-static const Timezone_t TZ[] = {
- 
- 
-  { "America/Chicago", "north-america.pool.ntp.org", -6 },
-  { "America/Denver", "north-america.pool.ntp.org", -7 },
-
-};
-
-#if defined(ARDUINO_ARCH_ESP8266)
-ESP8266WebServer Server;
-#elif defined(ARDUINO_ARCH_ESP32)
-WebServer Server;
-#endif
-
-AutoConnect       Portal(Server);
-AutoConnectConfig Config;       // Enable autoReconnect supported on v0.9.4
-AutoConnectAux    Timezone;
-
-
-// void rootPage() {
-//   String  content =
-//     "<html>"
-//     "<head>"
-//     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-//     "<script type=\"text/javascript\">"
-//     "setTimeout(\"location.reload()\", 1000);"
-//     "</script>"
-//     "</head>"
-//     "<body>"
-//     "<h2 align=\"center\" style=\"color:blue;margin:20px;\">Hello, world</h2>"
-//     "<h3 align=\"center\" style=\"color:gray;margin:10px;\">{{DateTime}}</h3>"
-//     "<p style=\"text-align:center;\">Reload the page to update the time.</p>"
-//     "<p></p><p style=\"padding-top:15px;text-align:center\">" AUTOCONNECT_LINK(COG_24) "</p>"
-//     "</body>"
-//     "</html>";
-//   static const char *wd[7] = { "Sun","Mon","Tue","Wed","Thr","Fri","Sat" };
-//   struct tm *tm;
-//   time_t  t;
-//   char    dateTime[26];
-
-//   t = time(NULL);
-//   tm = localtime(&t);
-//   sprintf(dateTime, "%04d/%02d/%02d(%s) %02d:%02d:%02d.",
-//     tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-//     wd[tm->tm_wday],
-//     tm->tm_hour, tm->tm_min, tm->tm_sec);
-//   content.replace("{{DateTime}}", String(dateTime));
-//   Server.send(200, "text/html", content);
-// }
-
-// void startPage() {
-//   // Retrieve the value of AutoConnectElement with arg function of WebServer class.
-//   // Values are accessible with the element name.
-//   String  tz = Server.arg("timezone");
-
-//   for (uint8_t n = 0; n < sizeof(TZ) / sizeof(Timezone_t); n++) {
-//     String  tzName = String(TZ[n].zone);
-//     if (tz.equalsIgnoreCase(tzName)) {
-//       configTime(TZ[n].tzoff * 3600, 0, TZ[n].ntpServer);
-//       Serial.println("Time zone: " + tz);
-//       Serial.println("ntp server: " + String(TZ[n].ntpServer));
-//       break;
-//     }
-//   }
-
-//   // The /start page just constitutes timezone,
-//   // it redirects to the root page without the content response.
-//   Server.sendHeader("Location", String("http://") + Server.client().localIP().toString() + String("/"));
-//   Server.send(302, "text/plain", "");
-//   Server.client().flush();
-//   Server.client().stop();
-// }
-//////////------------
 //////////////////////////// TASKS FOR EACH CORE //////////////////////////////////
-TaskHandle_t Task1;
-TaskHandle_t Task2;
+TaskHandle_t Task1; //core 0
+TaskHandle_t Task2; //core 1
 //create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
 
+#define bot    	    36 	  //VP
+#define ledred    	13	
+#define ledgreen    12	
+#define ADCCS1    	33 		   // SPI slave select
+#define ADCCS2    	25 		   // SPI slave select
+#define MISO        19 // GPIO19 MISO
+#define MOSI        27 // GPIO27 MOSI
+#define SCK         5   // GPIO5  SCK
+#define WDT         32   // GPIO5  SCK
+#define SDdetect    39   // VN
 
-                                                                                                              /////   declaracion de variables  //////////
+int adcvalue;
+
+//cleanup
+int vmax1,vmax2,vmax3,vmin1,vmin2,vmin3;
+int vmax, vmin;
+float V1,V2,V3;
+float V;
+float Ix[12];
+float I;
 
 
-const unsigned int BACKUPSIZE=200;
-int o=0;
-unsigned long currenttimearray[BACKUPSIZE];
-float payloadbag[BACKUPSIZE][16];
+//addup
+byte flagpubcount;
+byte current_input;
 
 
-int multiplos=30;            //(sin unidad) cuantos "TiempoLectura" leo continuamente antes de reportar a la nube
-int reportacada=230;         //(milisegundos) x por multilplos por TiempoLectira. es el tiempo maximo de espera si la lectura es cero y no reporta 
+float V1prom,V2prom,V3prom;
+float V1pre,V2pre,V3pre;
+float counterstatus;
+int intcounterstatus;
+float Ixprom[12];
+float Px[12];
+float Whx[12];
+float maxamps[12];
 
-const int TiempoLectura=1000;      //
+int o;
 
 
-float vbat=0;
-#define lipocheck 36  //GPIO36 analog pin para medir voltaje de bateria 
-#define flowpin 34   //digital pin para medir el sensor de flujo
-#define flowled 21  //antes era gpio2 porque el devmodule de menos pines tiene led, falta agregar uno para la nueva version
-#define ledgreen 32 //32 para esp32 grandes, 33 para chicos
-#define ledred 33   //33 para esp32 grandes, 32 para chicos
-#define bot 26
-#define railEnable 25
-#define enserialport 2
+// #define ADC_VREF    3300     // 3.3V Vref
+// #define ADC_CLK     1600000  // SPI clock 1.6MHz
 
+// //lora
+// #define CSLORA    	99 		   // SPI LORA slave select //falta asignar
+
+
+//MCP3208_1 adc(ADC_VREF, ADCCS1);
+//flag_onlineMCP3208_2 adc(ADC_VREF, ADCCS2);
+//uint16_t raw = adc.read(MCP3208_1::Channel::SINGLE_0);
+
+String ssid,password;
+
+//----------------------------------------------------------------------------------------------
+//  ADCCS1:       ADCCS2:
+//ch0=  i3        11
+//ch1=  i2        5
+//ch2=  i1        6
+//ch3=  v1        12
+//ch4=  v2        10
+//ch5=  v3        9
+//ch6=  ref2.5    8
+//ch7=  i4        7
+
+//TCPClient client;
+//UDP UDPClient;
+
+int buttonflag=0;
+int backupcounter=0;
+int publishnow=1;
+
+unsigned long previousMillis_timerbkp;
+// unsigned long backupcurrentTime;
+// long timercurrentTime;
+
+unsigned long currentMillis;
+
+//do every
+unsigned long previousMillistimerOTA;
+unsigned long previousMillis_ping;
+unsigned long previousMillis_wificheck;
+unsigned long previousMillis_wdt;
+unsigned long previousMillistimerReset;
+unsigned long previousMillisRestart;
+unsigned long restarttolerance=86400000;
+int flagofflinedrift=0;
+byte flag_wdt;
+byte flag_relauchTask2=0;
+//float acum;
 
 unsigned long previousMillistimerbkp;
-unsigned long previousMillistimerOTA;
+//unsigned long previousMillistimerOTA;
 
-int flagnohayluz;
-int publishnow=0;
-float flow=0;
-int pulses=0;
-const int sensormodel=1;
-const float calib = 1.0;
-long currentTime;
-long backupcurrentTime;
-long timercurrentTime;
-float counterstatus=0;
-int intcounterstatus=0;
-
-
-float flowtemp1;
-float flowtotal; //para guardar en memoria usar: RTC_DATA_ATTR , por ejemplo RTC_DATA_ATTR int bootCount = 0;
-float flowacum;
-const int publishconfig=1;
-int flagonline=0;
-int initialmessages=2;
-long zeit,prezeit;
-int flagpubcount;
-const int maxwait=400;
-int flagpub;
-int buttonflag=0;
-int timeupdate=0;
-int flagsend=0;
+//senddata:
 int httpCode =0;
-float flowtemp=0;
-int x=0;
-long zeit2=0;
+//ping:
 int avg_time_ms;
 
 unsigned long timer = 0; //para hacer currentTime backup en eeprom cada hora
 unsigned long timerOTA = 0; //para checar si hay actualizacion (cada 60 seg)
 unsigned long timerReset = 0; //para checar si hay actualizacion (cada 60 seg)
 
-int i=0;//temp
-bool acEnable;
 
-//---------atSERIAL-----------
-char bufserial[40];
-int lengthpayload;
-int validator = 0;
-//const byte whitelistlength=5;
-//int whiteID[whitelistlength];
+/////////adc////////
 
-float bufhotflow;
-float bufhottempIN;
-float bufhottempOUT;
-float bufsolarbat;
-float bufnivo1;
-float bufnivo1temp;
-float bufnivo1bat;
-float bufsolarcount;
-float bufboilercount;
-float bufnivocount;
-int sensorID;
-byte caso=0;
+int iread_new[resolution];  
+int vread_new[resolution];  
+byte pfable_new;
+
+int flag_error=0;
+
+//int iread[12][resolution];     // 12 corrientes
+//int vread[3][resolution];      // 3 fases
+
+//byte pfable[12];
+long pi[12];
+long pv1;
+long pv2;
+long pv3;
+long ppf[12];//contador para addup de cada power factor
+int proceedpowerfafctor;
+float pf[12];
+//byte pfactor[12];
+float pfactor_new;
+
+byte flag_proceed_voltage;
+byte flag_proceed_current;
+
+float ref25;
+unsigned long zeitsync,prezeitsync;
+byte syncstatus;
+int analogread;
+byte channel;
+
+int read(byte ADC, byte chanselector)
+{
+  //https://forum.arduino.cc/t/interface-adc-mcp3208-w-arduino-mega-using-spi/12920/2
+  // primero asigna el chanselector al adc pin del MCP3208 correpondiente, ya sea el 1 o el 2
+  // en caso de leer voltajes se usan los valores 21,22,23, si son corrientes se usa 1-12
+
+  
+  //  ADCCS1:       ADCCS2:   se mapea el input de corriente a medir con el MCP3208 y su pin.
+  // ch1=  3         11
+  // ch2=  2         5
+  // ch3=  1         6
+  // ch4=  v1/21     12
+  // ch5=  v2/22     10
+  // ch6=  v3/23     9
+  // ch7=  ref2.5    8
+  // ch8=  4         7
+  if (chanselector == 1 || chanselector == 6)
+  {
+    channel = 3;
+  }
+  else if (chanselector == 2 || chanselector == 5)
+  {
+    channel = 2;
+  }
+  else if (chanselector == 3 || chanselector == 11)
+  {
+    channel = 1;
+  }
+  else if (chanselector == 4 || chanselector == 7)
+  {
+    channel = 8;
+  }
+  else if (chanselector == 8 || chanselector == 25) //25 only goes with ADC1
+  {
+    channel = 7;
+  }
+  else if (chanselector == 9 || chanselector == 23) //23 only goes with ADC1
+  {
+    channel = 6;
+  }
+  else if (chanselector == 10 || chanselector == 22)//22 only goes with ADC1
+  {
+    channel = 5;
+  }
+  else if (chanselector == 12 || chanselector == 21)//21 only goes with ADC1
+  {
+    channel = 4;
+  }
+
+  adcvalue = 0;
+  byte commandbits = B11000000; // command bits - start, mode, chn (3), dont care (3)
+
+  // allow channel selection
+  commandbits |= ((channel - 1) << 3);
 
 
 
-const float A[10][3]=       { //sensor1, input , output           sensor1 = DN20 flow sensor    input=pulsos en 1seg, output=mililitros
-                            { 1,    135.4 , 320.5 },//originalmente: 135.4,320.5
-                            { 1,     71.5 , 175.4 },//71.5,175.4
-                            { 1,     40.6 , 103.6 },//40.6,103.6
-                            { 1,     14.0 ,  44.1 },//14,44.1
-                            { 1,      3.2 ,  16.6 },//3.2,16.6
-                            //sensor 2     
-                            { 2,       0 ,    0 },
-                            { 2,       0 ,    0 },
-                            { 2,       0 ,    0 },
-                            { 2,       0 ,    0 },
-                            { 2,       0 ,    0 }
-};
+
+  if (ADC == 1)
+  {
+    digitalWrite(ADCCS1, LOW); // Select adc
+  }
+  else
+  {
+    digitalWrite(ADCCS2, LOW); // Select adc
+  }
+  // setup bits to be written
+  //--------------------------------START ADC----------------------------------------------------------------------
+  for (int i = 7; i >= 3; i--)
+  { // hacer lectura del SPI de forma bitbangeada
+    digitalWrite(MOSI, commandbits & 1 << i);
+    // cycle clock
+    digitalWrite(SCK, HIGH);
+    digitalWrite(SCK, LOW);
+  }
+  digitalWrite(SCK, HIGH); // ignores 2 null bits
+  digitalWrite(SCK, LOW);
+  digitalWrite(SCK, HIGH);
+  digitalWrite(SCK, LOW);
+  // read bits from adc
+  for (int i = 11; i >= 0; i--) //i=11 do not change unless absolutely sure
+  {
+    adcvalue += digitalRead(MISO) << i;
+    // cycle clock
+    digitalWrite(SCK, HIGH);
+    digitalWrite(SCK, LOW);
+  }
+  //--------------------------------STOP ADC----------------------------------------------------------------------
+  digitalWrite(ADCCS1, HIGH); // turn off device
+  digitalWrite(ADCCS2, HIGH); // turn off device
+  return adcvalue;
+
+} // end read
+
+void sync(byte fase)
+{
+  fase = fase+20; //la funcion read() rquiere saber el ADC y el canal, en este caso el ADC siemore es 1 y el canal es 21 o 22 o 23
+  // encuentra el cruce por "cero" de negativo a positivo del voltaje de la fase indicada por byte fase
+  //OUTPUT: si logra sincronizarse syncstatus=1, si no syncstatus=0
+  byte dowhile = 0;
+  byte go = 0;
+  syncstatus = 0;
+  prezeitsync = micros();
+  do
+  {
+    // Serial.println("go1");
+    int syncmax=0;
+    int syncmin=7000;
+    while (go == 0)
+    {
+      int ramp = 0;
+      while (ramp < 200)
+      {
+
+        //analogread = analogRead(A0);
+        analogread = read(1,fase);
+        syncmax = max(syncmax,analogread);
+        syncmin = min(syncmin,analogread);
+        if (analogread > 2020 && analogread < 2040)
+        {
+          ramp = 201;
+        }
+        else
+        {
+          ramp++;
+        }
+
+        zeitsync = micros();
+        if ((zeitsync - prezeitsync) > 30000)
+        {
+          dowhile = 1;
+          ramp = 202;
+          go = 1;
+          syncstatus = 2;
+          //Serial.println("sync fail");
+        } // syncstatus=2 significa que no pudo sincronizarse
+      }
+
+      if (ramp == 201)
+      {
+        int temporal = read(1,fase);//antes analogRead(A0);
+        if (temporal > analogread)
+        {
+          go = 1;
+          dowhile = 1;
+
+          int amplitude = abs(syncmax-syncmin); //que tenga una amplitud minima de +-50 steps de 4096
+          if(amplitude > 100){
+             syncstatus = 1; // syncstatus=1 significa que si pudo sincronizarse <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+          }
+        }
+        else
+        {
+          delay(5);
+        }
+      } // END IF
+    }   // end while ramp
+  } while (dowhile == 0);
+}//end sync
+
+void readcycle_new(byte x) // current_input puede ser del 1 al 12
+{
+
+     Serial.print("read:");
+  current_input = x;
+     Serial.print(current_input);
+  byte attempts = 0;
+  byte MCP = 0;
+  byte sync_with_voltage = iconfig[current_input];
+
+                                      // Serial.print(" sync_with_voltage:");
+                                      // Serial.print(sync_with_voltage);
+                                      // Serial.println(" ");
+
+  if (sync_with_voltage > 0)
+  {
+    if (sync_with_voltage < 4)
+    {
+      sync(sync_with_voltage); // sincroniza con V1 temp
+
+      pfable_new = 0;
+      if (syncstatus == 1)
+      {
+        pfable_new = 1;
+      }
+    }
+
+    if (current_input <= 3) // si inputcorriente es 1,2,3,4 lee del MCP3208_1, si no lee del MCP3208_2
+    {
+      MCP = 1;
+    }
+    else
+    {
+      MCP = 2;
+    }
+
+ 
+
+    attempts = 0;
+    if (sync_with_voltage == 4)
+    {
+      sync_with_voltage = 1; // solo para el caso donde no importa el voltaje sino solo la corriente, ese "1" es solo para que lea algo, no importa que voltaje
+    }
+    do
+    {
+                                            //Serial.print("reading..");
+      tiempoa = micros();
+      for (int a = 0; a < resolution; a++)
+      {
+        vread_new[a] = read(1, sync_with_voltage + 20);
+        iread_new[a] = read(MCP, current_input + 1); //
+        // if (a == 1 && vread_new[0] < vread_new[1] && vread_new[0] > 2000 && vread_new[0] < 2100 & iread_new[0]> 1800 && iread_new[0] > 2300) //
+        // {
+        //   a = 0;
+        //   Serial.print("restart 1");
+        //   tiempoa = micros();
+        //   attempts++;
+        // }
+      }
+
+      tiempob = micros();
+      deltat = tiempob - tiempoa;
+
+      //Serial.print(" DeltaT:");
+      //Serial.print(deltat);
+      if (deltat > 17000)
+      {
+        attempts++;
+        Serial.print(attempts);
+        delay(50);
+      }
+      if(attempts >= 5)
+      {
+        flag_error=1; //demasiados attempts
+        deltat=16999;
+      }
+    } while (deltat > 17000);
+    // Serial.print(" attempts:");
+    // Serial.print(attempts);
+
+//  Serial.print(" iread50:");
+//     Serial.print( iread_new[50] );
+//     Serial.print(" iread100:");
+//     Serial.print( iread_new[100] );
+//     Serial.print(" iread200:");
+//     Serial.print( iread_new[20] );
+  } // end switch
+} // end readcycle_new
+
+
+void cleanup_new()
+{
+  flag_proceed_voltage = 1;
+  flag_proceed_current = 1;
+  int counterror1 = 0;
+  int counterror2 = 0;
+
+  // Serial.println("pre");
+  // for (unsigned int m = 0; m < resolution; m++)
+  // {
+  //  Serial.print(iread_new[m]);
+  //  Serial.print(" ");
+  // }
+  // Serial.println(" ");
+  // Serial.println(" ");
+
+  int z = resolution - 1;
+  for (unsigned int m = 0; m < z; m++)
+  {
+    if (vread_new[m] > 4000 || vread_new[m] < 50)
+    {
+      counterror1++;
+    }
+
+    if (iread_new[m] > 4000 || iread_new[m] < 50)
+    {
+      counterror2++;
+    }
+
+    int a = vread_new[m];
+    int b = vread_new[m + 1];
+    int c = abs(a - b);
+    if (c > 100 && a < 4000 && a > 50)
+    {
+      vread_new[m + 1] = vread_new[m];
+    }
+
+
+    a = iread_new[m];
+    b = iread_new[m + 1];
+    c = abs(a - b);
+    if (c > 100 && a < 4000 && a > 50)
+    {
+      iread_new[m + 1] = iread_new[m];
+    }
+  }
+
+
+
+  if (counterror1 > 10)
+  {
+    Serial.print(" voltage offlimit count: ");
+    Serial.print(counterror1);
+    flag_proceed_voltage = 0;
+  }
+
+
+  if (counterror2 > 10)
+  {
+    // Serial.print(" current offlimit count:");
+    // Serial.print(counterror2);
+    // Serial.println("post");
+    // for (unsigned int m = 0; m < resolution; m++)
+    // {
+    //   Serial.print(iread_new[m]);
+    //   Serial.print(" ");
+    // }
+    // Serial.println(" ");
+    // Serial.println(" ");
+    flag_proceed_current = 0;
+  }
+}//end cleanup_new
+
+void voltajes_new() // lee arrays de voltaje y entrega floats V1,V2,V3
+  {
+    // Serial.print("/vl");
+    vmax = 0;
+    vmin = 5000;
+    V = -2;
+
+    if (flag_proceed_voltage == 1)
+    {
+      //Serial.print("flag_proceed_voltage=1");
+      for (unsigned int m = 0; m < resolution; m++)
+      {
+        int a = vread_new[m];
+        int b = vread_new[m + 1];
+        if (a < 4000 && a > 50)
+        {
+          int jump = abs(a - b);
+          if (jump < 300)
+          {
+            vmax = max(a, vmax);
+            vmin = min(a, vmin);
+          }
+          else
+          {
+            m = m + 2;
+          }
+        }
+        else
+        {
+          vread_new[m]=2048;
+            Serial.println("xxx:");
+
+        }
+      }
+       //Serial.print("vmax:"); Serial.print(vmax);
+      //Serial.print(" vmin:"); Serial.print(vmin);
+
+      // Pase por cero (2048):
+      // rutina para confimrar que Vx @0V pasa por 2048bits del ADC +- no mas de 500.
+      // inicialmente se van a descartar valores que salgan de 500 para filtrar ruido,
+      // posteriormente se desea hacer un analisis de la curva incluso cuando no pasa por 2048.
+      int a = vmax - 2048;
+      int b = 2048 - vmin;
+      int c = abs(a - b);
+      if (c < 100)
+      {
+        V = (vmax - vmin) * Vcalib; // se obtiene Vrms de cada fase
+        // Serial.print(" V simetrico, c=");
+        // Serial.print (c);
+        // Serial.print(" V: ");
+        // Serial.println (V);
+      }
+      // checa si esta en rangos aceptables
+      if (V < 0)
+      {
+      //Serial.print("__________ V<0:");Serial.print(V);
+        V = -1;
+      }
+      if (V > 400)
+      {
+        Serial.print("Overvoltage: V=");
+        Serial.println(V);
+        V = -1;
+      }
+        Serial.print(" V="); Serial.println(V);
+    }
+    else
+    {
+      V = -1;
+    }
+
+  } // end voltaje_new
+
+void corrientes_new()
+  {
+    // Serial.print("/crr");
+    // calcula el area de la curva de cada corriente, si iconfig[x]==0 entonces Ix[x]=0.001;
+    long iarea = 0;
+    int istep = 0;
+    int imax = 0;
+    int imin = 7000;
+
+    if (flag_proceed_current == 1)
+    {
+      for (unsigned int m = 0; m < resolution; m++)
+      {
+        imax = max(iread_new[m], imax);
+        imin = min(iread_new[m], imin);
+      }
+      int a = imax - midpoint;
+      int b = midpoint - imin;
+      int c = abs(a - b);
+      if (c < 100) // symmetry ok?
+      {
+        // if symmetry is detected proceed with iarea
+        // iarea
+        iarea = 0;
+        for (unsigned int m = 0; m < resolution; m++)
+        {
+          istep = iread_new[m];
+          int istepnext = iread_new[m + 1];
+          istep = abs(istep - midpoint);
+          istepnext = istepnext - midpoint;
+          int jump = abs(istep - istepnext);
+
+          // if(jump>2000){Serial.print(" jump");Serial.print(jump);}
+
+          // if (istep > 2000)//temp
+          // {
+          //   Serial.print(" ");
+          //   Serial.print(istep);
+          // }
+          if (istep < atenuacion || jump > 1000) // para reducir ruido aunque tambien reduce sensibilidad a corrientes bajas
+          {
+            istep = 0;
+            m++;
+          }
+          // faflta ver un problema de medicio de corriente que a vveces dice aprox 30A de la nada, puta madre.
+          iarea = iarea + istep;
+          /// Serial.print(" iarea");Serial.print(iarea);
+        }
+
+        I = iarea * icalib[current_input] / 1000000; // calibra cada corriente en en caso de usar otra clamp
+
+        if (I > 1000)
+        {
+          Serial.print("Overcurrent: I[");
+          Serial.print(current_input);
+          Serial.print("]=");
+          Serial.println(I);
+          I = -1;
+        }
+
+        // if (current_input == 0) // temp
+        // {
+        //   Serial.print(" Ix[");
+        //   Serial.print(current_input);
+        //   Serial.print("]=");
+        //   Serial.print(I);
+        // }
+
+      } // end if c<100
+      else
+      {
+        I = -1; // error no symmetry detected
+        Serial.println("[ERROR] no current symmetry ");
+        Serial.print("imax:");
+        Serial.print(imax);
+        Serial.print(" imin:");
+        Serial.println(imin);
+      }
+    }
+    else
+    {
+      I = -1;
+    }
+
+
+  } // end corrientes_new
+
+
+
+void maxcurrent(byte a) //obtiene el valor maximo de potencia de cada periodo
+  {
+    if (I > maxamps[a])
+    {
+      maxamps[a] = I;
+    }
+  }
+
+void powerfactor_new()
+  {
+    // Serial.print("/pf");
+    // para que funcione bien se requiere que los datos no contengan ruido o picos, por lo tanto se tiene que hacer un prefiltrado de picos que sirve de una vez para analisis de voltajes y correintes tambien
+    // falta que se haga una confirmacion si Vx=-1, en cuyop caso no calcules power fafctor porque trae algo raro.
+    //  notas:
+    /*
+    hay seis posibles casos:
+    1. carga 100% resistiva (pf=1)
+    2. carga 100% resistiva inversa (pf=-1, corriente en sentido contrario)
+    3. carga capacitiva: corriente despues de voltaje mismo sentido (pf de 0.5 a 1)
+    4. carga capacitiva inversa: corriente sentiddo contrario despues de voltaje  (pf de 0.5 a -1)
+    5. carga inductivav: corriente antes de voltaje mismo sentido (pf de 0.5 a 1)
+    6. carga inductivav inversa: corriente sentiddo contrario antes de voltaje  (pf de 0.5 a -1)
+  */
+
+    // 1 realizar analisis de pf solo si iconfig[] es 1 o 2 o 3
+    // 2 confirmar que sync() fue exitoso
+
+    // para saber si es carga capacitiva o inductiva:
+    // se necesita encontrar el cruce por "cero" del voltaje y de corriente y analizar cual cruza primero.
+    // para voltaje:
+
+    byte q = iconfig[current_input];
+    int r;
+    if(q==1)
+    {
+      r = V1;
+    }
+    else if(q==2)
+    {
+      r = V2;
+    }
+    else if(q==3)
+    {
+      r = V3;
+    }
+    else
+    {
+      pfable_new = 0;
+    }
+    int vpointer = 0;
+    if (pfable_new == 1 && r >= 1 && I>0.05)
+    {
+      // Serial.print(" pfable ");
+      // Serial.print(i);
+      // Serial.print(" ok ");
+      proceedpowerfafctor = 0;
+
+      for (int j = 0; j < resolution; j++)
+      {
+        // Serial.print(vread[0][j]);
+        // Serial.print(" ");
+        if (vread_new[j] < 2048)
+        {
+          j++;
+        }
+        else
+        {
+          vpointer++;// deberia ser cas siemore el mismo valor al rededor de resolution/2 o sea 520
+        }
+      }
+      //Serial.print(" vpointer: ");
+      //Serial.print(vpointer);
+      int halfresolution=resolution/2;
+      int halfresolution_low= halfresolution-10;
+      int halfresolution_high=halfresolution+10;
+      if (vpointer > halfresolution_low && vpointer < halfresolution_high)
+      {
+        proceedpowerfafctor = 1;
+       // Serial.print(", in range.");
+      }
+
+      if (proceedpowerfafctor == 1)
+      {
+        int a = 0;
+        int b = 0;
+        int c = 0;
+        int ipointer = vpointer;
+
+        // una vez encontrado el cruce por cero de vvoltaje, checar si la corriente es directa o inversa
+        // dado que voltaje cruza por cero hacia "abajo" es decir la segunda mitad del seno, la corriente tambien deberia en caso de ser directa
+        a = iread_new[ipointer];
+        b = iread_new[ipointer + 4]; // se compara con unas cuantas mediciones despues, en este caso 4
+        c = iread_new[ipointer + 8];
+        if (a > b && a > c && b > c) // se usan tres puntos para tener redundancia
+        {
+          //direto
+          //sigue obtener si es capacitivo o inductivo:
+          if (iread_new[ipointer] > midpoint) // 2048 o midpoint? //directo cpacitivo (a la derecha)
+          {
+            while (iread_new[ipointer] > midpoint) // falta asignar cual de los tres voltajes (usando iconfig)
+            {
+              ipointer++;
+            }
+            // agregar filtros de coherencia
+            float x = 3.1416 / 520 * (ipointer - vpointer - 1); // 520 es aprox la mitad de resolution = 1040, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+            pfactor_new = cos(x);
+            Serial.print(" directo capacitivo:");
+            Serial.print(pfactor_new );
+            Serial.println("");
+
+            // falta indicar que es directo y capacitivo
+          }
+          else if (iread_new[ipointer] < midpoint) // directo inductivo (corriente a la izq)
+          {
+            while (iread_new[ipointer] < midpoint) // falta asignar cual de los tres voltajes (usando iconfig)
+            {
+              ipointer--;
+            }
+            // agregar filtros de coherencia
+            float x = 3.1416 / 520 * (vpointer - ipointer - 1); // 520 es aprox la mitad de resolution = 1040, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+            pfactor_new = cos(x);
+            Serial.print(" directo inductivo:");
+            Serial.print(pfactor_new );
+            Serial.println("");
+
+            // falta indicar que es directo y inductivo
+          }
+        }
+        else if (a < b && a < c && b < c)
+        {
+          // inverso
+          if (iread_new[ipointer] < 2048) // 2048 o midpoint? //inverso cpacitivo (a la derecha)
+          {
+            while (iread_new[ipointer] < 2048) // falta asignar cual de los tres voltajes (usando iconfig)
+            {
+              ipointer++;
+            }
+            // agregar filtros de coherencia
+            float x = 3.1416 / 520 * (ipointer - vpointer - 1); // 520 es aprox la mitad de resolution = 1040, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+            pfactor_new = cos(x);
+            Serial.print(" inverso capacitivo:");
+            Serial.print(pfactor_new );
+            Serial.println("");
+
+            // falta indicar que es inverso y capacitivo
+          }
+          else if (iread_new[ipointer] > 2048) // directo inductivo (corriente a la izq)
+          {
+            while (iread_new[ipointer] > 2048) // falta asignar cual de los tres voltajes (usando iconfig)
+            {
+              ipointer--;
+            }
+            // agregar filtros de coherencia
+            float x = 3.1416 / 520 * (vpointer - ipointer - 1); // 520 es aprox la mitad de resolution = 1040, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
+            pfactor_new = cos(x);
+            Serial.print(" inverso inductivo:");
+            Serial.print(pfactor_new );
+            Serial.println("");
+
+            // falta indicar que es inverso y inductivo
+          }
+        }
+        else
+        {
+          // error
+          proceedpowerfafctor = 0;
+        }
+      } // end proceed
+    }
+    else
+    {
+      pfactor_new = 2;//invalid
+    }
+
+} // end powerfactor
+
+void analysis_new(byte a)
+{
+  // Serial.print("analysis:");
+  // Serial.print(a);
+  current_input = a;
+  byte input = iconfig[current_input]; //vain: de 0 a 11
+
+  if (input > 0)  //0 ignore, 1=fase1, 2=fase2, 3=fase3, 4=dont care just read
+  {
+    //                                                             Serial.println(" ");
+    // Serial.print("                                                cleanup_new:");
+    cleanup_new();
+
+    //                                                           Serial.println(" "); 
+    // Serial.print("                                                voltajes_new:");
+    voltajes_new();
+
+    //                                                             Serial.println(" "); 
+    // Serial.print("                                                corrientes_new:");
+    corrientes_new();
+
+    //                                                             Serial.println(" "); 
+    // Serial.print("                                                maxcurrent:");    
+    maxcurrent(a);
+
+    //                                                            Serial.println(" "); 
+    // Serial.print("                                                powerfactor_new:");
+    powerfactor_new();
+  }
+}
+
+void addup_new(byte j) // va sumando cada lectura a Vxprom y a Ixprom[] y va contando cuantas sumas lleva en "p"
+{
+  //Serial.print("addup ");
+  //voltajes
+  if(V>=0) 
+  {
+    byte vo = iconfig[j];
+      //Serial.print(" vo:");Serial.print(vo);
+    if (vo == 1)
+    {
+      V1prom = V1prom + V;
+      pv1++;
+      //Serial.print(" V1prom:");Serial.print(V1prom);
+      
+    }
+    else if (vo == 2)
+    {
+      V2prom = V2prom + V;
+      pv2++;
+       //Serial.print(" V2prom:");Serial.print(V2prom);
+    }
+    else if (vo == 3)
+    {
+      V3prom = V3prom + V;
+      pv3++;
+       //Serial.print(" V3prom:");Serial.print(V3prom);
+    }
+    else
+    {
+
+    }
+  }
+
+  
+
+  // corrientes
+
+  if (iconfig[j] > 0)
+  {
+    if (I >= 0)
+    {
+      Ixprom[j] = Ixprom[j] + I;
+      pi[j]++;
+    }
+  }
+
+  // powerfactor
+  if (iconfig[j] > 0)
+  {
+    if (pfactor_new < 2)
+    {
+      //Serial.println("");
+      //Serial.print("pf_pre:");
+      //Serial.print(pf[j]);
+      pfactor_new=abs(pfactor_new);//temp
+      pf[j] = pf[j] + pfactor_new;
+      ppf[j]++;
+      //Serial.print("pfactor_new:");
+      //Serial.print(pfactor_new);
+      //Serial.print(" ppf");
+      //Serial.print(j);
+      //Serial.print(":");
+      //Serial.println(ppf[j]);
+      //Serial.print("pf_post:");
+      //Serial.print(pf[j]);
+    }
+    if (pfactor_new == 2)
+    {
+      //Serial.print("pfactor_new=2");
+    }
+  }
+
+} // end addup_new
+
+void average_new()  //cuando ya va a publicar saca el promedio dividiendo la suma entre el conteo de mediciones "p"
+{
+    Serial.println("averaging_new");
+    V1 = V1prom / pv1;
+    V2 = V2prom / pv2;
+    V3 = V3prom / pv3;
+    Serial.print("V1=");
+    Serial.print(V1);
+    Serial.print(" V2=");
+    Serial.print(V2);
+    Serial.print(" V3=");
+    Serial.println(V3);
+
+    for (int j = 0; j < 12; j++)    //calcula la potencia Px[] dependiendo de cual corriente esta asignada a cual voltaje
+    {
+        if (pi[j] > 0) { // CAMBIO POR IA. SE LE AGREGA IF PARA ASEGURARSE QUE NO HAYA ERROR SI EL VECTOR DE PI ES CERO. 
+            Ix[j] = Ixprom[j] / pi[j];
+        } else {
+            Ix[j] = 0.0;
+        } //HASTA AQUI EL CAMBIO POR IA. 
+        Serial.print("average Ix");
+        Serial.print(j);
+        Serial.print("=");
+        Serial.println(Ix[j]);
+        if (iconfig[j] == 1)
+        {
+            Px[j] = Ix[j] * V1;
+        }
+        else if (iconfig[j] == 2)
+        {
+            Px[j] = Ix[j] * V2;
+        }        
+        else if (iconfig[j] == 3)
+        {
+            Px[j] = Ix[j] * V3;
+        }
+        else // o sea si iconfig[j] es 0
+        {
+          Px[j] = 0.0;
+        }
+
+        // powerfactor
+
+        Serial.println("average pf:");
+        Serial.print("pf[j]");
+        Serial.print(pf[j]);
+        Serial.print(" ppf[j]");
+        Serial.println(ppf[j]);
+        if (ppf[j] == 0)
+        {
+          ppf[j] = 1;
+          pf[j] = 2;
+        }
+        pf[j] = pf[j] / ppf[j];
+        Serial.print(" final pf[j]");
+        Serial.println(pf[j]);
+    }
+
+    pv1=pv2=pv3=0;
+    for (int j = 0; j < 12; j++)    
+    {
+      pi[j] = 0;
+      ppf[j] = 0;
+    }
+}//end average_new
+
+
+////////end adc/////
 
 void updatecurrentTime()
 {
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    // pregunta a internet
 
-Serial.print("updatecurrentTime: ");
+    // get internet time
+    Serial.println("updatecurrentTime...");
+    unsigned long internet_time;
 
-//EEPROM.read(0);//leer
+    // try to get internet times x times
+    for (int i = 0; i < 10; i++)
+    {
+      Serial.print("attempt nr: ");
+      Serial.print(i);
+      timeClient.begin();
+      timeClient.setTimeOffset(0);
+      timeClient.update();
+      internet_time = timeClient.getEpochTime(); // get epoch from internet
+      Serial.print(" ,internet time: ");
+      Serial.println(internet_time);
+      timeClient.end();
 
-//EEPROM.write(0, ledState);
-//EEPROM.commit();
+      if (internet_time > 1700000000)
+      {
+        i = 10; // exit
+      }
+    }
 
-  //Serial.print("timebackup=");Serial.println(timebackup);
-  Serial.println(currentTime);
+    if (internet_time < 1700000000)
+    {
+      preferences.begin("my-pref", false);
+      currentTime = preferences.getULong("currentTime", 0);
+      preferences.end();
+    }
+    else
+    {
+      currentTime = internet_time;
+    }
+  }
+  else
+  {
+    preferences.begin("my-pref", false);
+    currentTime = preferences.getULong("currentTime", 0);
+    preferences.end();
+  }
+  // Serial.print("pre currentTime is: ");Serial.println(currentTime);
+  // period = millis() - millispre + 500;
+  // Serial.print("period is: ");Serial.println(period);
+  // currentTime = currentTime + period/1000;
+  // millispre=millis();
+  // Serial.print("post currentTime is: ");Serial.println(currentTime);
 
+  // if(internet_time < 1640000000)
+  // {
+  //   if(currentTime < 1640000000)
+  //   {
+  //     preferences.begin("my-pref", false);
+  //     //preferences.putULong("currentTime", internet_time);
+  //     //currentTime=internet_time;
+  //     long q = preferences.getULong("currentTime", 123);
+  //     Serial.print("last saved time is: ");Serial.println(q);
+  //     preferences.end();
+  //     currentTime=q;
+  //   }
+  // }
+  // else
+  // {
+  //   long k = abs(currentTime-internet_time);
 
+  //   Serial.print("drift is: ");Serial.println(k);
+  //   if(k>20)
+  //   {
+  //     preferences.begin("my-pref", false);
+  //     preferences.putULong("currentTime", internet_time);
+  //     currentTime=internet_time;
+  //     Serial.print("new saved currenttime is: ");
+  //     long q = preferences.getULong("currentTime", 123);
+  //     Serial.println(q);
+  //     preferences.end();
+  //   }
+  //   if (flagofflinedrift == 0)
+  //   {
+  //     offlinedrift = 0;
+  //   }
+  // }
+
+} // end updatecurrentTime
+
+void updatecurrentTime_old()
+{
+
+  //get internet time
+  Serial.println("updatecurrentTime...");
+  unsigned long internet_time;
   timeClient.begin();
   timeClient.setTimeOffset(0);
   timeClient.update();
-  currentTime = timeClient.getEpochTime();
+  internet_time = timeClient.getEpochTime(); // get epoch from internet
+  Serial.print("internet time: ");
+  Serial.println(internet_time);
   timeClient.end();
 
-  // if (currentTime < 1600000000)
-  // {
-  //   timeClient.begin();
-  //   timeClient.setTimeOffset(0);
-  //   timeClient.update();
-  //   timeClient.end();
-  // }
-
- // Serial.print("currentTime: Time.now: ");
-  //Serial.println(currentTime); //rtc.nowEpoch();
-  if (1600000000 < currentTime && currentTime < 2000000000)
+  //get internet time again if unsuccessful
+  if (internet_time < 1660000000)
   {
-    backupcurrentTime = currentTime;
-    timercurrentTime = millis();
-  }
-  else
-  {
-    String currentTimeStr;
-    currentTime = backupcurrentTime + (millis() - timercurrentTime) / 1000;
-    if (currentTime < 1600000000)
+    Serial.print("Reading internet time again: ");
+    timeClient.begin();
+    timeClient.setTimeOffset(0);
+    timeClient.update();
+    internet_time = timeClient.getEpochTime(); // get epoch from internet
+    Serial.print("internet time: ");
+    Serial.println(internet_time);
+    timeClient.end();
+    if (internet_time < 1660000000)
     {
-      String readbackup = "";
-      for (int i = currentTimeStr.length(); i > 0; i--)
-      { //imprime lo que guardo para confirmar
-        
-        Serial.print(EEPROM.read(i));
-        readbackup = readbackup + EEPROM.read(i); //leer
-      }
-      unsigned long dfdfa = currentTimeStr.substring(0).toInt();
-      Serial.print("recovered: ");
-      Serial.println(dfdfa);
-      currentTime=dfdfa;
-      timebackup = 0;
-      readbackup = "";
+      offlinedrift=internet_time;
+      Serial.print("offlinedrift: ");
+      Serial.println(offlinedrift);
+      flagofflinedrift=1;
     }
   }
 
-  if(timebackup==1 && currentTime > 1600000000){
-    Serial.print("backing up currentTime: ");Serial.println(currentTime);
-    String currentTimeStr = String(currentTime);
-    for (int i=currentTimeStr.length();i>0;i--){  //length deberia ser siempre 10 (por ej 1.600.000.000)
-      byte x = currentTimeStr.substring(i, i).toInt();
-      EEPROM.write(i, x);
-      EEPROM.commit();
-      //Serial.print(i);
+  Serial.print("pre currentTime is: ");Serial.println(currentTime);
+  period = millis() - millispre + 500;
+  Serial.print("period is: ");Serial.println(period);
+  currentTime = currentTime + period/1000;
+  millispre=millis();
+  Serial.print("post currentTime is: ");Serial.println(currentTime);
+
+  if(internet_time < 1640000000)
+  {
+    if(currentTime < 1640000000)
+    {
+      preferences.begin("my-pref", false); 
+      //preferences.putULong("currentTime", internet_time);
+      //currentTime=internet_time;
+      long q = preferences.getULong("currentTime", 123);
+      Serial.print("last saved time is: ");Serial.println(q);
+      preferences.end();
+      currentTime=q;
     }
-    String readbackup="";
-    for (int i=currentTimeStr.length();i>0;i--){   //imprime lo que guardo para confirmar
-      EEPROM.read(i);
-      readbackup = readbackup + EEPROM.read(i);       //leer
-    }
-    unsigned long dfdfa = currentTimeStr.substring(0).toInt();
-    Serial.print("saved: ");Serial.println(dfdfa);
-    timebackup=0;
-    readbackup="";
   }
   else
   {
-    //Serial.println("timebackup=0 or currentTime is invalid");
-    timebackup=0;
-  }
-  
+    unsigned long k = (currentTime-internet_time);
 
+    Serial.print("drift is: ");Serial.println(k);
+    if(k>20)
+    {
+      preferences.begin("my-pref", false); 
+      preferences.putULong("currentTime", internet_time);
+      currentTime=internet_time;
+      Serial.print("new saved currenttime is: ");
+      long q = preferences.getULong("currentTime", 123);
+      Serial.println(q);
+      preferences.end();
+    }
+    if (flagofflinedrift == 0)
+    {
+      offlinedrift = 0;
+    }
+  }
+}//end updatecurrentTime
+
+
+///////////wifi/////////
+
+int flag_online;
+
+//SSIDs to be presented to the user
+String SSID1 = "";
+String SSID2 = "";
+String SSID3 = "";
+String SSID4 = "";
+String SSID5 = "";
+
+#define WIFI_CONNECTION_ATTEMPTS 2
+
+
+DNSServer dnsServer;
+AsyncWebServer server(80);
+
+String saved_ssid;
+String saved_password;
+
+bool valid_ssid_received = false;
+bool valid_password_received = false;
+bool wifi_timeout = false;
+
+int flag_rescanwifi=0;
+IPAddress Ip(192,168,0,1);    //setto IP Access Point
+
+
+
+
+//Webpage HTML
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html><head>
+  <title>Captive Portal Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head><body>
+  <h3>Captive Portal Demo</h3>
+  <br><br>
+  <form action="/get">
+    <br>
+    SSID: <select name = "ssid">
+      <option value=%SSID1%>%SSID1%</option>
+      <option value=%SSID2%>%SSID2%</option>
+      <option value=%SSID3%>%SSID3%</option>
+      <option value=%SSID4%>%SSID4%</option>
+      <option value=%SSID5%>%SSID5%</option>
+    </select>
+    <br>
+    <br>
+    Password: <input type="text" name="password">
+    <input type="submit" value="Submit">
+  </form>
+</body></html>)rawliteral";
+
+//Processor for adding values to the HTML
+String processor(const String& var) {
+  //Serial.println(var);
+  if (var == "SSID1") {
+    return SSID1;
+  }
+  else if (var == "SSID2") {
+    return SSID2;
+  }
+  else if (var == "SSID3") {
+    return SSID3;
+  }
+  else if (var == "SSID4") {
+    return SSID4;
+  }
+  else if (var == "SSID5") {
+    return SSID5;
+  }
+
+  else
+  {
+    return SSID1;
+  }
 }
 
-void APmode()
+void scanWiFi()
 {
+  WiFi.mode(WIFI_AP_STA); 
+  //WiFi.disconnect();
+  delay(100);
+  Serial.println("scan start");
+  int k = 5;
 
-  //disableCore0WDT();
-  Serial.println("AP mode");
-  Serial.println("Creating portal and trying to connect...");
+  // WiFi.scanNetworks will return the number of networks found
+  int n = WiFi.scanNetworks();
+  if (n < k) k = n;
+  Serial.println("scan done");
+  if (n == 0) {
+    Serial.println("no networks found");
+  } else {
+    Serial.print(n);
+    Serial.println(" networks found");
+    for (int i = 0; i < n; ++i) {
+      // Print SSID and RSSI for each network found
+      Serial.print(i + 1);
+      Serial.print(": ");
+      Serial.print(WiFi.SSID(i));
+      Serial.print(" (");
+      Serial.print(WiFi.RSSI(i));
+      Serial.print(")");
+      Serial.println((WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? " " : "*");
+      delay(10);
+      if (i == 0)
+      {
+        SSID1 = WiFi.SSID(i);
+      }
+      else if (i == 1)
+      {
+        SSID2 = WiFi.SSID(i);
+      }
+      else if (i == 2)
+      {
+        SSID3 = WiFi.SSID(i);
+      }
+      else if (i == 3)
+      {
+        SSID4 = WiFi.SSID(i);
+      }
+      else if (i == 4)
+      {
+        SSID5 = WiFi.SSID(i);
+      }
+    }
+  }
+  Serial.println("");
 
-  //Config.immediateStart = true;
-  Config.autoReconnect = true;
-  Config.hostName = "M3TR " + String(M3TRid);
-  Config.portalTimeout = 60000;
-  Config.apid = "M3TR " + String(M3TRid);
-  //Config.apip = 192.168.0.1;
-  Config.retainPortal = false; //testito
-  Portal.config(Config);
-  //esp_task_wdt_reset();
+}//end scan
 
-  // Establish a connection with an autoReconnect option.
-  bool acEnable;
-  acEnable = Portal.begin();
 
-  if (acEnable)
+class CaptiveRequestHandler : public AsyncWebHandler {
+  public:
+    CaptiveRequestHandler() {}
+    virtual ~CaptiveRequestHandler() {}
+
+    bool canHandle(AsyncWebServerRequest *request) {
+      //request->addInterestingHeader("ANY");
+      return true;
+    }
+
+    void handleRequest(AsyncWebServerRequest *request) {
+      request->send_P(200, "text/html", index_html, processor);
+    }
+};
+
+void setupServer() {
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+    request->send_P(200, "text/html", index_html, processor);
+    Serial.println("Client Connected");
+   // flag_rescanwifi=1;
+  });
+
+  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest * request) {
+    String inputMessage;
+    String inputParam;
+
+    if (request->hasParam("ssid")) {
+      inputMessage = request->getParam("ssid")->value();
+      inputParam = "ssid";
+      ssid = inputMessage;
+      Serial.println(inputMessage);
+      valid_ssid_received = true;
+    }
+
+    if (request->hasParam("password")) {
+      inputMessage = request->getParam("password")->value();
+      inputParam = "password";
+      password = inputMessage;
+      Serial.println(inputMessage);
+      valid_password_received = true;
+    }
+    request->send(200, "text/html", "The values entered by you have been successfully sent to the device. It will now attempt WiFi connection");
+  });
+}
+
+void WiFiSoftAPSetup()
+{
+  scanWiFi();
+
+  //https://randomnerdtutorials.com/esp32-useful-wi-fi-functions-arduino/
+  WiFi.mode(WIFI_AP);
+
+
+  WiFi.softAP("XOC");
+  
+
+
+  delay(100);
+  IPAddress NMask(255, 255, 255, 0);
+  WiFi.softAPConfig(Ip, Ip, NMask);
+  Serial.print("AP IP address: "); Serial.println(WiFi.softAPIP());
+}
+
+void StartCaptivePortal() {
+  Serial.println("Setting up AP Mode");
+  WiFiSoftAPSetup();
+  Serial.println("Setting up Async WebServer");
+  setupServer();
+  Serial.println("Starting DNS Server");
+  dnsServer.start(53, "*", WiFi.softAPIP());
+  server.addHandler(new CaptiveRequestHandler()).setFilter(ON_AP_FILTER);//only when requested from AP
+  server.begin();
+  dnsServer.processNextRequest();
+}
+
+void WiFiStationSetup(String rec_ssid, String rec_password)
+{
+  wifi_timeout = false;
+  WiFi.mode(WIFI_STA);
+  char ssid_arr[20];
+  char password_arr[20];
+  rec_ssid.toCharArray(ssid_arr, rec_ssid.length() + 1);
+  rec_password.toCharArray(password_arr, rec_password.length() + 1);
+  Serial.print("Received SSID: "); Serial.println(ssid_arr); Serial.print("password: "); Serial.println(password_arr);
+  WiFi.begin(ssid_arr, password_arr);
+
+  uint32_t t1 = millis();
+
+  int n_attempts_left = WIFI_CONNECTION_ATTEMPTS;
+  int k=3;
+  while (k>0)
   {
-    Serial.println("WiFi connected: " + WiFi.localIP().toString());
-    Portal.handleClient();
+    if (WiFi.status() != WL_CONNECTED)
+    {
+      k--;
+      delay(3000);
+      digitalWrite(WDT, HIGH);
+      delay(10);
+      digitalWrite(WDT, LOW);
+      Serial.print("'");
+      if (millis() - t1 > 3000) // 15 seconds elapsed connecting to WiFi
+      {
+        n_attempts_left -= 1;
+        Serial.println();
+        Serial.println("Timeout connecting to WiFi. The SSID and Password seem incorrect.");
+        Serial.print("Number of attempts left is: ");
+        Serial.println(n_attempts_left);
+        t1 = millis();
+
+        if (n_attempts_left == 0)
+        {
+          Serial.println();
+          Serial.println("All attempts exhausted");
+          valid_ssid_received = false;
+          valid_password_received = false;
+          StartCaptivePortal();
+          wifi_timeout = true;
+          break;
+        }
+      }
+    }
+  }
+  if (!wifi_timeout)
+  {
+    preferences.begin("my-pref", false);
+
+    Serial.println("");
+    Serial.print("WiFi connected to: ");
+    Serial.println(rec_ssid);
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+
+    if (rec_ssid != saved_ssid)
+    {
+      Serial.print("Updating SSID to: ");
+      Serial.println(rec_ssid);
+      preferences.putString("rec_ssid", rec_ssid);
+    }
+
+    if (rec_password != saved_password)
+    {
+      Serial.print("Updating Password to: ");
+      Serial.println(rec_password);
+      preferences.putString("rec_password", password);
+      saved_password = rec_password;
+    }
+
+    Serial.print("Verifying storage of credentials: ");
+    ssid = preferences.getString("rec_ssid", WIFI_SSID);
+    Serial.print("rec_ssid: ");
+    Serial.print(ssid);
+    password = preferences.getString("rec_password", WIFI_PASSWORD);
+    Serial.print(" rec_password: ");
+    Serial.println(password);
+    preferences.end();
+  }
+}//end WiFiStationSetup
+
+void WiFiStationSetup2(String rec_ssid, String rec_password)
+{
+  wifi_timeout = false;
+  WiFi.mode(WIFI_STA);
+  char ssid_arr[20];
+  char password_arr[20];
+  rec_ssid.toCharArray(ssid_arr, rec_ssid.length() + 1);
+  rec_password.toCharArray(password_arr, rec_password.length() + 1);
+  Serial.print("Received SSID: "); Serial.println(ssid_arr); Serial.print("And password: "); Serial.println(password_arr);
+  WiFi.begin(ssid_arr, password_arr);
+
+  uint32_t t1 = millis();
+
+  int n_attempts_left = WIFI_CONNECTION_ATTEMPTS;
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(3000);
+    digitalWrite(WDT, HIGH);
+    delay(10);
+    digitalWrite(WDT, LOW);
+    Serial.print("'");
+    if (millis() - t1 > 5000) // 15 seconds elapsed connecting to WiFi
+    {
+      n_attempts_left -= 1;
+      Serial.println();
+      Serial.println("Timeout connecting to WiFi. The SSID and Password seem incorrect.");
+      Serial.print("Number of attempts left is: "); Serial.println(n_attempts_left);
+      t1 = millis();
+
+      if (n_attempts_left == 0) {
+        Serial.println();
+        Serial.println("All attempts exhausted");
+        valid_ssid_received = false;
+        valid_password_received = false;
+        //StartCaptivePortal();
+        wifi_timeout = true;
+        break;
+      }
+    }
+  }
+}//end WiFiStationSetup2 _no prefefrences store
+
+void ping()
+{
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        Serial.print("pinging.. ");
+        //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts
+        //esp_task_wdt_add(NULL); //add current thread to WDT watch
+        if (Ping.ping("www.google.com", 2) == 1) //bool ret = Ping.ping("www.google.com",10); //repeticiones
+        {
+            //esp_task_wdt_disable();
+            // disableCore0WDT();
+            int avg_time_ms = Ping.averageTime();
+            Serial.print(avg_time_ms);
+            //zeit2 = 10000 + millis();
+            if (avg_time_ms > 1000)
+            {
+               
+                digitalWrite(ledgreen, LOW);
+                digitalWrite(ledred, HIGH);
+                
+                flag_online = 0;
+            }
+            else
+            {
+               
+                digitalWrite(ledgreen, HIGH);
+                digitalWrite(ledred, LOW);
+                flag_online = 1;
+            }
+        }
+        else
+        {
+            Serial.print("no pong");
+            flag_online = 0;
+          
+                digitalWrite(ledgreen, LOW);
+                digitalWrite(ledred, HIGH);
+        }
+    }
+    else {
+        flag_online=0;
+    
+                digitalWrite(ledgreen, LOW);
+                digitalWrite(ledred, HIGH);
+    }
+} //end ping
+
+int offlinecounter=0;
+void connecttohardcodedwifis(){
+  Serial.print(" connecttohardcodedwifis ");
+
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    WiFi.disconnect();
+    WiFi.mode( WIFI_MODE_NULL );//off
+    delay(500);
+    WiFi.mode(WIFI_STA);
+    Serial.println("Trying to connect to XOC factory wifi..");
+    Serial.print("SSID: ");
+    Serial.println(WIFI_SSID_xoc);
+    Serial.print("Pass: ");
+    Serial.println(WIFI_PASSWORD2);
+    for (int i = 2; i > 0; i--) // launch portal and try to connect to previous wifi at the same time, repeat every 60 sec
+    {
+      WiFi.begin(WIFI_SSID_xoc, WIFI_PASSWORD2);
+      delay(3000);
+      digitalWrite(WDT, HIGH);
+      delay(10);
+      digitalWrite(WDT, LOW);
+      Serial.println(i);
+      if (WiFi.status() == WL_CONNECTED)
+      {
+        delay(1000);
+        ping();
+        if(flag_online == 1){
+        i = 0;
+        offlinecounter=0;
+        }
+      }
+    }
   }
 
-  if (!acEnable)
-  {
-    Serial.println("portal eeeeeennnnnnddddd");
-    //WiFi.disconnect();
-    delay(100);
-    //esp_task_wdt_reset();
-    //connectToWiFi(1);
-    //WiFi.mode(WIFI_STA);
-    //WiFi.begin();
-    WiFi.reconnect();
-    //WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    // WiFi.setHostname("M3TR");
+   //tentativa para que se conecte mejor. este metodo se ve mas robusto, probarlo en vez de las lineas de abajo, falta ver cuanto tarda toda la secuencia.
 
-    //portal.handleClient();
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.println("Trying to connect to manually added wifi..");
+    WiFiStationSetup2(ssid, password);
+
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      ping();
+      if (flag_online == 1)
+      {
+        //i = 0;
+        offlinecounter = 0;
+      }
+    }
   }
-} // end AP mode
+
+
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.println("Trying to connect to default coded wifi..");
+    WiFiStationSetup2(WIFI_SSID, WIFI_PASSWORD);
+
+
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      ping();
+      if (flag_online == 1)
+      {
+        //i = 0;
+        offlinecounter = 0;
+      }
+    }
+  }
+
+
+
+
+
+  if (WiFi.status() == WL_CONNECTED)
+  {
+
+    if (flag_online == 0)
+    {
+      offlinecounter++;
+      Serial.print("offlinecounter: "); Serial.println(offlinecounter);
+    }
+  }
+
+
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    offlinecounter++;
+  }
+
+  Serial.println(" end connecttohardcodedwifis");
+}//end connecttohardcodedwifis
+
+void wificheck()
+{
+  Serial.println(" wificheck");
+  preferences.begin("my-pref", false);
+
+  connecttohardcodedwifis();
+
+  char ssid_arr[20];
+  char password_arr[20];
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    digitalWrite(ledgreen, LOW);
+    digitalWrite(ledred, HIGH);
+    
+    flag_online=0;
+    WiFi.disconnect();
+    
+    ssid = preferences.getString("rec_ssid", "xoc");
+    password = preferences.getString("rec_password", "12345678");
+    Serial.print("Reconnecting to WiFi with SSID: ");Serial.print(ssid);Serial.print(" pass:");Serial.println(password);
+    ssid.toCharArray(ssid_arr, ssid.length() + 1);
+    password.toCharArray(password_arr, password.length() + 1);
+    //WiFi.begin(ssid_arr, password_arr);
+  }
+
+
+
+  if (WiFi.status() != WL_CONNECTED) //if still offline
+  {
+    WiFi.disconnect();
+    Serial.println("Searching for known wifi and starting portal now...");
+    StartCaptivePortal();
+
+    for (int i = 40; i > 0; i--) // launch portal and try to connect to previous wifi at the same time, repeat every 60 sec
+    {
+      // connecttohardcodedwifis();
+      WiFi.begin(ssid_arr, password_arr);
+      delay(2000);
+      digitalWrite(WDT, HIGH);
+      delay(10);
+      digitalWrite(WDT, LOW);
+      if (WiFi.status() == WL_CONNECTED)
+      {
+        Serial.println("WiFi ok, pinging...");
+        i = 0;
+        ping(); 
+        //flag_online=2; //wifi ok but still needs to test ping
+        server.end();
+        WiFi.mode(WIFI_STA);  //stop portal
+        Serial.println("WiFi ok");
+        digitalWrite(ledgreen, HIGH);
+        digitalWrite(ledred, LOW);
+      }
+      Serial.print(i); 
+      Serial.print(" ");
+      dnsServer.processNextRequest();
+      delay(500);
+      if (valid_ssid_received && valid_password_received)
+      {
+        Serial.println("Attempting WiFi Connection!");
+        WiFiStationSetup(ssid, password);
+        i=0;
+      }
+      if(flag_rescanwifi==1) //when client refreshes page do a re-scan of wifis
+      {
+
+        flag_rescanwifi=0;
+        WiFi.disconnect();
+        StartCaptivePortal();
+      }
+    }
+
+    //next: end captive portal after 60 seconds unless a clients has connected to the esp32 in which case keep portal active unless clients disconnects, in which case resume 60 sec countdown.
+  }
+
+
+
+  preferences.end();
+}//end wificheck
+
+
+
+////////wifi end///////
+
+
+
+
+
+
+
 
 void addtobasket() //checa que pueda subor datos a internet, si no entonces guarda en ram cada medicion hasta que pueda subir los datos pendientes
 {
@@ -440,7 +1773,7 @@ void addtobasket() //checa que pueda subor datos a internet, si no entonces guar
     }
   }
 
-  if (flagonline == 0)
+  if (flag_online == 0)
   {
     intcounterstatus = counterstatus;
     counterstatus = intcounterstatus;
@@ -452,880 +1785,172 @@ void addtobasket() //checa que pueda subor datos a internet, si no entonces guar
     counterstatus = intcounterstatus;
   }
 
-
-
   o++;
   Serial.print("location 'o': ");
   Serial.println(o);
 
-  reportacada = 230;
-  multiplos = 30;
-  if (o > 50)
-  {
-    reportacada = 15;
-    multiplos = 120;
-  } // cada  2 min con flujo y cada 0.5 horas sin flujo
-  if (o > 100)
-  {
-    reportacada = 12;
-    multiplos = 600;
-  } // cada 10 min con flujo y cada 2 horas sin flujo
-  if (o > 150)
-  {
-    reportacada = 16;
-    multiplos = 900;
-  } // cada 15 min con flujo y cada 4 horas sin flujo
-
-
-
   if (o == BACKUPSIZE - 1)
   {
-    o = 1;
+       // si se llena entonces suma los Wh y los guarda en la primera casilla de BACKUPSIZE, si se vuelve a llenar guarda todo en la segunda casilla etc.
+            // if (bigbackup==BACKUPSIZE-2){bigbackup=0;}//ahora si sobreescribe el backup
+            
+            // float Wh1acum,Wh2acum,Wh3acum,Wh4acum,Wh5acum=0.0;
+            // for(int p=bigbackup;p<BACKUPSIZE;p++){
+            //     Wh1acum=Wh1acum+payloadbag[p][13];
+            //     Wh2acum=Wh2acum+payloadbag[p][14];
+            //     Wh3acum=Wh3acum+payloadbag[p][15];
+            //     Wh4acum=Wh4acum+payloadbag[p][16];
+            //     Wh5acum=Wh5acum+payloadbag[p][17];
+            //     payloadbag[p][19]=0;
+            // }
+            // payloadbag[bigbackup][13]=Wh1acum;
+            // payloadbag[bigbackup][14]=Wh2acum;
+            // payloadbag[bigbackup][15]=Wh3acum;
+            // payloadbag[bigbackup][16]=Wh4acum;
+            // payloadbag[bigbackup][17]=Wh5acum;
+            // payloadbag[bigbackup][19]=1;
+            
+            // bigbackup++;
+            // o=bigbackup;
+            o=0;
+            payloadbag[o][0] = 0;
   }
   else
   {
-    //  [0]          [1]       [2]         [3]       [4]     [5]               [6]
-    //currenttime,  flowtemp, flowtotal,flowacum,   vbat,   counterstatus,    has data?
+    //antes
+    // while (payloadbag[o][0] == 1) // encuentra un slot libre
+    // {
+    //   o++;Serial.print(o);
+    // } 
 
-    currenttimearray[o] = currentTime;
-    payloadbag[o][0] = flowtemp1;
-    payloadbag[o][1] = flowtotal;
-    payloadbag[o][2] = flowacum;
-    payloadbag[o][3] = vbat;
-    payloadbag[o][4] = counterstatus;
-    payloadbag[o][5] = 1;
+    //ahora
+    int q=0;
+    while (payloadbag[q][0] == 1) // encuentra un slot libre
+    {
+      q++;Serial.print(q);
+    } 
+    o=q;
 
-    //extras from lora sensors:
-    payloadbag[o][6] = bufhotflow;        bufhotflow=0;
-    payloadbag[o][7] = bufhottempIN;      bufhottempIN=-1;      //deberia dejarlo con la temp anterior para que no joda los promedios
-    payloadbag[o][8] = bufhottempOUT;     bufhottempOUT=-1;       //voy a dejarlo un tiempo a ver como se comporta
-    payloadbag[o][9] = bufsolarbat;       bufsolarbat=-1;
-    payloadbag[o][10] = bufnivo1;         bufnivo1=-1;
-    payloadbag[o][11] = bufnivo1temp;     bufnivo1temp=-1;
-    payloadbag[o][12] = bufnivo1bat;      bufnivo1bat=-1;
-    payloadbag[o][13] = bufsolarcount;    bufsolarcount=-1;
-    payloadbag[o][14] = bufboilercount;   bufboilercount=-1;
-    payloadbag[o][15] = bufnivocount;     bufnivocount=-1;
-    
- 
-  //casos: 1=solar or boiler only, 2=boiler backup, 3=heater todo
-  //M3TR2xxx,flujo=0, tempin, tempout, vbat, count
-  //SOLAR or BOILER if ID is  "M3TR1xxx",  flow,   tempin=0, tempout,  vbat,  count
-  //BOILER bkp if ID is       "M3TR2xxx",  flow=0, tempin,   tempout,  vbat,  count
-  //HEATER TODO if ID is      "M3TR3xxx",  flow,   tempin,   tempout,  vbat,  count
-  
+    payloadbag[o][0] = 1;
+    payloadbag[o][2] = counterstatus;
+    currenttimearray[o] = currentTime; //se necesita usar unsigned long en vez de float para que funcione bien
+    payloadbag[o][3] = V1;
+    payloadbag[o][4] = V2;
+    payloadbag[o][5] = V3;
 
+    for (byte j = 0; j < 12; j++)
+    {
+      payloadbag[o][j + 6] = Ix[j];
+      payloadbag[o][j + 18] = Whx[j];
+      payloadbag[o][j + 30] = maxamps[j];
+      payloadbag[o][j + 42] = pf[j]; 
+    }
 
-    Serial.print("nr: ");
-    Serial.print(o);
-    Serial.println(" saved:  ");
-
-    Serial.print("               currenttime: ");
-    Serial.println(currentTime);
-    Serial.print("               flowtemp M3TR: ");
-    Serial.println(flowtemp1);
-    Serial.print("               flowtotal: ");
-    Serial.println(flowtotal);
-    Serial.print("               flowacum: ");
-    Serial.println(flowacum);
-    Serial.print("               vbat: ");
-    Serial.println(vbat);
-    Serial.print("               counterstatus: ");
-    Serial.println(counterstatus);
-    Serial.print("               o: ");
-    Serial.println(o);
-
-    flowtotal = 0;
   } //end else
 } //end addtobasket
 
-void checkserial() //recibe un mensaje del LoRa receiver y confirma que el ID sea white, entrega validator=0(si no) o validator=2(si si)
+void empaquetador()
 {
-  //caracteres invalidos para recibir: "*"
-  validator = 0;
-  //COMs
-  //1 ping, link
-  //2 unlink
-  //3 anymode=true, link
-  //4 set whitelist, link
-  //5 clear whitelist, anymode, link
-  while (atSerial.available())
+//Serial.print("emp");
+  byte flaginit = 0;
+  byte flagpub = 0;
+  if (initialmessages == 0)
   {
-
-    char inChar = (char)atSerial.read();
-    //byte inChar2=inChar -'0';
-    //Serial.println(inChar2);
-    //Serial.println("recibido");
-    if (inChar == '?')
-    {
-      //Serial.print("M3TR_unique_id"); Serial.println(M3TR_unique_id); 
-      int cien, diez, uno;
-      atSerial.print("4");   //provide whitelist: se asigna un ID para solar y uno para nivo, el whiteID es el mismo que el ID del M3TR.
-      if(M3TR_unique_id < 10){
-        cien = 0;
-        diez = 0;
-        uno = M3TR_unique_id; 
-      }
-      if(M3TR_unique_id >= 10){
-        cien = 0;
-        diez = M3TR_unique_id/10;
-        uno = M3TR_unique_id-diez*10; 
-      }
-      if(M3TR_unique_id >= 100){
-        cien = M3TR_unique_id/100;//Serial.println(cien); 
-        diez = (M3TR_unique_id-cien*100)/10;//Serial.println(diez); 
-        uno = M3TR_unique_id-cien*100-diez*10;//Serial.println(uno); 
-      }
-
-      atSerial.print("1");    //solar
-      atSerial.print(cien);   //solar
-      atSerial.print(diez);
-      atSerial.print(uno);
-
-      atSerial.print("2");    //boiler bkp
-      atSerial.print(cien);   //solar
-      atSerial.print(diez);
-      atSerial.print(uno);
-
-      atSerial.print("3");    //heater all
-      atSerial.print(cien);   //solar
-      atSerial.print(diez);
-      atSerial.print(uno);
-
-      atSerial.print("4");    //nivo
-      atSerial.print(cien);   //solar
-      atSerial.print(diez);
-      atSerial.print(uno);
-      atSerial.print("@");   //finish 
-
-      Serial.println("--- Lora receptor conectado ---");
-    }
-    if (inChar == '(') //incoming message
-    {
-      Serial.print("(");
-      long readtimer = 0;
-      long readtimerpre = millis();
-      for (int i = 0; i < 40; i++)
-      {
-        bufserial[i] = 0;
-      } //cleanup
-      //receive and load message in buffer
-      //while (inChar != ')' && readtimer < 1000)
-      lengthpayload = 0;
-      while (atSerial.available() && readtimer < 1000)
-      {
-        inChar = (char)atSerial.read();
-        bufserial[lengthpayload] = inChar;
-        lengthpayload++;
-        Serial.print(inChar);
-        if (lengthpayload > 40)
-        {
-          Serial.println("cadena demasiado larga");
-          validator = 0;
-          readtimerpre = 0; //exit
-          lengthpayload = 0;
-        }
-        else
-        {
-          if (inChar == ')')
-          {
-            validator = 1;
-            readtimerpre = 0;
-            //Serial.println(")");
-          } //exit
-        }
-        readtimer = millis() - readtimerpre;
-      } //end while
-      lengthpayload = 0;
-
-      //SOLAR if ID is "M3TR1xxx",  flow,  temp,  vbat,  count
-      //NIVO  if ID is "M3TR0xxx",  level, 0,     vbat,  count
-      if (validator == 1)
-      {
-        Serial.print(" Validando ID prefix: ");
-        validator = 0;
-        if (bufserial[0] == 'M' && bufserial[1] == '3' && bufserial[2] == 'T' && bufserial[3] == 'R')
-        {
-          Serial.print(" OK, type: ");
-          if (bufserial[4] == '1' ){Serial.print("1 (solar), whiteID: ");}
-          if (bufserial[4] == '2' ){Serial.print("2 (boiler bkp), whiteID: ");}
-          if (bufserial[4] == '3' ){Serial.print("3 (heater todo), whiteID: ");}
-          if (bufserial[4] == '4' ){Serial.print("4 (nivo), whiteID: ");}
-          int cien = bufserial[5]- '0'; //convert from chat to int
-          int diez = bufserial[6]- '0';
-          int uno = bufserial[7]- '0';
-          int sensorID = cien * 100 + diez * 10 + uno;
-          for (int i = 0; i <= whitelistlength; i++)
-          {
-            if (sensorID == whiteID[i])
-            {
-              validator = 2;
-              Serial.print("OK: ");
-              Serial.print(sensorID);
-              i=whitelistlength+1;
-              validator=2;
-            }
-          }
-          if(validator==0){Serial.print(" invalid.");}
-        }
-      } //end if validator
-    }   // end if '('
-    else
-    {
-      Serial.print(inChar);
-    }
-  }     //end serial available
-} //end serialcheck
-
-void sensors()
-{
-  if (validator == 2)
+    flaginit = 1;
+  } // publica varias mediciones inicialmente para confirmar llegada de datos a la nube
+  else
   {
-    Serial.println("LoRa payload analysis:");
-    validator = 0;
-    //nota: id es bufserial[5] * 100 + bufserial[6] * 10 + bufserial[7];
-    //01234567
-    //SOLAR if ID is "M3TR1xxx",flow,tempIN=0,tempOUT,vbat,count
-    //               (M3TR1123 ,1234, 0      ,123    ,123, 1234,-12)      =26 char
-    //BOILER BKP  if ID is "M3TR2xxx",flow=0,tempIN,tempOUT,vbat,count
-    //          (M3TR2123 , 0  ,123 ,123 ,123,1234,-12)     =25 caracteres
-    //HEATER TODO  if ID is "M3TR3xxx",flow,tempIN,tempOUT,vbat,count
-    //          (M3TR3123 ,123  ,123 ,123 ,123,1234,-12)     =25 caracteres
-    //NIVO  if ID is "M3TR4xxx",level,temp,vbat,count
-    //          (M3TR2123 ,123  ,123 ,123 ,1234,-12)     =25 caracteres
-
-      //float hotflowbkp = payloadbag[i][6];
-      //float hottempbkpIN = payloadbag[i][7];
-      //float hottempbkpOUT = payloadbag[i][8];
-      //float solarbatbkp = payloadbag[i][9];
-      //float nivo1bkp = payloadbag[i][10];
-      //float nivo1tempbkp = payloadbag[i][11];
-      //float nivo1batbkp = payloadbag[i][12];
-
-    if (bufserial[4] == '1')  //solar or boiler only
-    {
-      //bufhotflow////////////////////////////////////////////////////
-      bufhotflow = 0; byte x = 0;
-      for (int i = 9; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1) { int uno = bufserial[9] - '0'; bufhotflow = uno;}
-      if (x == 2) { int diez = bufserial[9] - '0'; int uno =  bufserial[10] - '0'; bufhotflow = diez * 10 + uno;}
-      if (x == 3) { int cien = bufserial[9] - '0'; int diez = bufserial[10] - '0'; int uno = bufserial[11] - '0'; bufhotflow = cien * 100 + diez * 10 + uno;}
-      if (x == 4) { int mil = bufserial[9] - '0';  int cien = bufserial[10] - '0'; int diez = bufserial[11] - '0'; int uno = bufserial[12] - '0'; bufhotflow = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufhotflow=bufhotflow/100;      // 1234 -> 12.34
-      Serial.print(" bufhotflow: ");
-      Serial.print(bufhotflow);
-
-      //bufhottemp IN////////////////////////////////////////////////////
-      bufhottempIN = 0;
-      byte i2 = x + 10;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ',') { i = 40; }
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';bufhottempIN = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufhottempIN = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufhottempIN = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufhottempIN = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufhottempIN=bufhottempIN/10;  //564 -> 56.4
-      Serial.print(" bufhottempIN: ");
-      Serial.print(bufhottempIN);
-
-      //bufhottemp OUT////////////////////////////////////////////////////
-      bufhottempOUT = 0;
-      byte i3 = i2 + x + 1;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ',') { i = 40; }
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';bufhottempOUT = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufhottempOUT = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufhottempOUT = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufhottempOUT = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufhottempOUT=bufhottempOUT/10;  //564 -> 56.4
-      Serial.print(" bufhottempOUT: ");
-      Serial.print(bufhottempOUT);
-
-      //bufsolarbat////////////////////////////////////////////////////
-      bufsolarbat = 0;
-      i3 = i2 + x + 1;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';bufsolarbat = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufsolarbat = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufsolarbat = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufsolarbat = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      Serial.print(" bufsolarbat: ");
-      Serial.print(bufsolarbat);
-
-      //counter////////////////////////////////////////////////////
-      unsigned int count = 0;
-      i3 = i2 + x + 1;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';count = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';count = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';count = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';count = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufsolarcount=count;
-      Serial.print(" countserial: ");
-      Serial.print(bufsolarcount);
-
-
-      //rssi////////////////////////////////////////////////////
-      int rssi = 0;
-      i3 = i2 + x + 2;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ')'){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';rssi = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';rssi = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';rssi = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';rssi = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      Serial.print(" rssi: ");
-      Serial.println(rssi);
-      Serial.println("");
-
-      //if bufhotflow <= 0 && bufhottempIN >= 0 && bufhottempIN < 99 && bufhottempOUT >= 0 && bufhottempOUT < 99 && bufsolarbat >= 0
-      //validar y guardar
-      if (bufhotflow >= 0 && bufhottempOUT >= -10 && bufhottempOUT < 99) //validar coherencia de datos
-      {
-        payloadbag[i][6] = bufhotflow;
-        payloadbag[i][7] = bufhottempIN;
-        payloadbag[i][8] = bufhottempOUT;
-        payloadbag[i][9] = bufsolarbat;
-        payloadbag[i][13] = bufsolarcount;
-        caso=1;
-        addtobasket();
-
-      }
-
-    } //end if bufserial4=1 (solar)
-
-    if (bufserial[4] == '2')  //boiler bkp
-    {
-      //bufhotflow////////////////////////////////////////////////////
-      bufhotflow = 0; byte x = 0;
-      for (int i = 9; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1) { int uno = bufserial[9] - '0'; bufhotflow = uno;}
-      if (x == 2) { int diez = bufserial[9] - '0'; int uno =  bufserial[10] - '0'; bufhotflow = diez * 10 + uno;}
-      if (x == 3) { int cien = bufserial[9] - '0'; int diez = bufserial[10] - '0'; int uno = bufserial[11] - '0'; bufhotflow = cien * 100 + diez * 10 + uno;}
-      if (x == 4) { int mil = bufserial[9] - '0';  int cien = bufserial[10] - '0'; int diez = bufserial[11] - '0'; int uno = bufserial[12] - '0'; bufhotflow = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufhotflow=bufhotflow/100;      // 1234 -> 12.34
-      Serial.print(" bufhotflow: ");
-      Serial.print(bufhotflow);
-
-      //bufhottemp IN////////////////////////////////////////////////////
-      bufhottempIN = 0;
-      byte i2 = x + 10;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ',') { i = 40; }
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';bufhottempIN = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufhottempIN = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufhottempIN = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufhottempIN = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufhottempIN=bufhottempIN/10;  //564 -> 56.4
-      Serial.print(" bufhottempIN: ");
-      Serial.print(bufhottempIN);
-
-      //bufhottemp OUT////////////////////////////////////////////////////
-      bufhottempOUT = 0;
-      byte i3 = i2 + x + 1;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ',') { i = 40; }
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';bufhottempOUT = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufhottempOUT = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufhottempOUT = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufhottempOUT = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufhottempOUT=bufhottempOUT/10;  //564 -> 56.4
-      Serial.print(" bufhottempOUT: ");
-      Serial.print(bufhottempOUT);
-
-      //bufsolarbat////////////////////////////////////////////////////
-      bufsolarbat = 0;
-      i3 = i2 + x + 1;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';bufsolarbat = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufsolarbat = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufsolarbat = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufsolarbat = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      Serial.print(" bufsolarbat: ");
-      Serial.print(bufsolarbat);
-
-      //counter////////////////////////////////////////////////////
-      unsigned int count = 0;
-      i3 = i2 + x + 1;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';count = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';count = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';count = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';count = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufboilercount=count;
-      Serial.print(" countboiler: ");
-      Serial.print(bufboilercount);
-
-      //rssi////////////////////////////////////////////////////
-      int rssi = 0;
-      i3 = i2 + x + 2;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ')'){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';rssi = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';rssi = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';rssi = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';rssi = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      Serial.print(" rssi: ");
-      Serial.println(rssi);
-      Serial.println("");
-
-      //validar y guardar
-      if (bufhotflow == 0 && bufhottempIN >= 0 && bufhottempIN < 99 && bufhottempOUT >= 0 && bufhottempOUT < 99 && bufsolarbat >= 0) //validar coherencia de datos
-      {
-        payloadbag[i][6] = bufhotflow;
-        payloadbag[i][7] = bufhottempIN;
-        payloadbag[i][8] = bufhottempOUT;
-        payloadbag[i][9] = bufsolarbat;
-        payloadbag[i][14] = bufboilercount;
-        caso=2;
-        addtobasket();
-
-      }
-
-    } //end if bufserial4=1 (solar)
-
-    if (bufserial[4] == '3')  //heater todo
-    {
-      //bufhotflow////////////////////////////////////////////////////
-      bufhotflow = 0; byte x = 0;
-      for (int i = 9; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1) { int uno = bufserial[9] - '0'; bufhotflow = uno;}
-      if (x == 2) { int diez = bufserial[9] - '0'; int uno =  bufserial[10] - '0'; bufhotflow = diez * 10 + uno;}
-      if (x == 3) { int cien = bufserial[9] - '0'; int diez = bufserial[10] - '0'; int uno = bufserial[11] - '0'; bufhotflow = cien * 100 + diez * 10 + uno;}
-      if (x == 4) { int mil = bufserial[9] - '0';  int cien = bufserial[10] - '0'; int diez = bufserial[11] - '0'; int uno = bufserial[12] - '0'; bufhotflow = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufhotflow=bufhotflow/100;      // 1234 -> 12.34
-      Serial.print(" bufhotflow: ");
-      Serial.print(bufhotflow);
-
-      //bufhottemp IN////////////////////////////////////////////////////
-      bufhottempIN = 0;
-      byte i2 = x + 10;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ',') { i = 40; }
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';bufhottempIN = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufhottempIN = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufhottempIN = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufhottempIN = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufhottempIN=bufhottempIN/10;  //564 -> 56.4
-      Serial.print(" bufhottempIN: ");
-      Serial.print(bufhottempIN);
-
-      //bufhottemp OUT////////////////////////////////////////////////////
-      bufhottempOUT = 0;
-      byte i3 = i2 + x + 1;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ',') { i = 40; }
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';bufhottempOUT = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufhottempOUT = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufhottempOUT = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufhottempOUT = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufhottempOUT=bufhottempOUT/10;  //564 -> 56.4
-      Serial.print(" bufhottempOUT: ");
-      Serial.print(bufhottempOUT);
-
-      //bufsolarbat////////////////////////////////////////////////////
-      bufsolarbat = 0;
-      i3 = i2 + x + 1;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';bufsolarbat = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufsolarbat = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufsolarbat = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufsolarbat = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      Serial.print(" bufsolarbat: ");
-      Serial.print(bufsolarbat);
-
-      //counter////////////////////////////////////////////////////
-      unsigned int count = 0;
-      i3 = i2 + x + 1;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';count = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';count = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';count = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';count = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufsolarcount=count;
-      Serial.print(" countheater: ");
-      Serial.print(bufsolarcount);
-
-      //rssi////////////////////////////////////////////////////
-      int rssi = 0;
-      i3 = i2 + x + 2;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ')'){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';rssi = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';rssi = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';rssi = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';rssi = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      Serial.print(" rssi: ");
-      Serial.println(rssi);
-      Serial.println("");
-
-      //validar y guardar
-      if (bufhotflow >= 0 && bufhottempIN >= -10 && bufhottempIN < 99 && bufhottempOUT >= -10 && bufhottempOUT < 99 && bufsolarbat >= 0) //validar coherencia de datos
-      {
-        payloadbag[i][6] = bufhotflow;
-        payloadbag[i][7] = bufhottempIN;
-        payloadbag[i][8] = bufhottempOUT;
-        payloadbag[i][9] = bufsolarbat;
-        payloadbag[i][13] = bufsolarcount;
-        caso=3;
-        addtobasket();
-      }
-
-    } //end if bufserial4=1 (solar)
-
-    if (bufserial[4] == '4')  //nivo
-    {
-      //bufnivo1:
-      bufnivo1 = 0;
-      byte x = 0;
-      for (int i = 9; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[9] - '0';bufnivo1 = uno;}
-      if (x == 2){int diez = bufserial[9] - '0';int uno = bufserial[10] - '0';bufnivo1 = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[9] - '0';int diez = bufserial[10] - '0';int uno = bufserial[11] - '0';bufnivo1 = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[9] - '0';int cien = bufserial[10] - '0';int diez = bufserial[11] - '0';int uno = bufserial[12] - '0';bufnivo1 = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      Serial.print(" bufnivo1: ");
-      Serial.print(bufnivo1);
-
-      //bufnivo1temp
-      bufnivo1temp = 0;
-      byte i2 = x + 10;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}// checar que 30 sean suficientes y no me falten mas
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';bufnivo1temp = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufnivo1temp = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';bufnivo1temp = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufnivo1temp = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufnivo1temp=bufnivo1temp/10;
-      Serial.print(" bufnivo1temp: ");
-      Serial.print(bufnivo1temp);
-
-      //bufnivo1bat
-      bufnivo1bat = 0;
-      byte i3 = i2 + x + 1;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';bufnivo1bat = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';bufnivo1bat = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0'; bufnivo1bat = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';bufnivo1bat = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      Serial.print(" bufnivo1bat: ");
-      Serial.print(bufnivo1bat);
-
-      //counter
-      unsigned int count = 0;
-      i3 = i2 + x + 1;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ','){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';count = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';count = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';count = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';count = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      bufnivocount=count;
-      Serial.print(" countnivo: ");
-      Serial.print(bufnivocount);
-
-      //rssi
-      int rssi = 0;
-      i3 = i2 + x + 2;
-      i2 = i3;
-      x = 0;
-      for (int i = i2; i < 40; i++)
-      {
-        if (bufserial[i] == ')'){i = 40;}
-        x++;
-      }
-      x--; //para corregir la cuenta de x
-      if (x == 1){int uno = bufserial[i2] - '0';rssi = uno;}
-      if (x == 2){int diez = bufserial[i2] - '0';int uno = bufserial[i2 + 1] - '0';rssi = diez * 10 + uno;}
-      if (x == 3){int cien = bufserial[i2] - '0';int diez = bufserial[i2 + 1] - '0';int uno = bufserial[i2 + 2] - '0';rssi = cien * 100 + diez * 10 + uno;}
-      if (x == 4){int mil = bufserial[i2] - '0';int cien = bufserial[i2 + 1] - '0';int diez = bufserial[i2 + 2] - '0';int uno = bufserial[i2 + 3] - '0';rssi = mil * 1000 + cien * 100 + diez * 10 + uno;}
-      Serial.print(" rssi: ");
-      Serial.println(rssi);
-      Serial.println("");
-      //filtro de coherencia de datos (que no sean negativos o fuera de rango)
-
-      if (bufnivo1 >= 0 && bufnivo1temp >= -10 && bufnivo1temp < 99 && bufnivo1bat >= 0) //validar coherencia de datos
-      {
-        payloadbag[i][10] = bufnivo1;
-        payloadbag[i][11] = bufnivo1temp;
-        payloadbag[i][12] = bufnivo1bat;
-        payloadbag[i][15] = bufnivocount;
-        caso=4;
-        addtobasket();
-      }
-    }
-  } //end if validator==2
-} //end sensors
-
-void connectToWiFi(int x)
-{
-  //  esp_task_wdt_reset();
-  //Serial.println("Connect to Wifi");
-  if (x == 1)
-  {
-    zeit2 = 0;
-    x = 0;
+    flaginit = 0;
+    initialmessages--;
+    delay(3000);
   }
 
+  const int periodo = 10000;
+  //                   10000       120         initialmessages     button o casos especiales
+  if ((zeit - prezeit) > periodo * reportacada * flaginit * publishnow)
+  { // cada x milisegundos promedia las mediciones que ha estado agregando a addup() para promediar
+    Serial.println("preparing to send... ");
+    average_new(); // promedia todas las lecturas realizadas durante el periodo
+    //prezeit = zeit; //se paso abajo
+    // cosas para variabilidad=1:
+    //  float temp1 = fabs(V1pre-V1);
+    //  float temp2 = fabs(V2pre-V2);
+    //  float temp3 = fabs(V3pre-V3);
 
-  if (WiFi.status() == WL_CONNECTED && millis() > zeit2)
-  {
-    Serial.print("pinging.. ");
-    //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts
-    //esp_task_wdt_add(NULL); //add current thread to WDT watch
-    if (Ping.ping("www.google.com", 2) == 1) //bool ret = Ping.ping("www.google.com",10); //repeticiones
+    // for (int j=0;j<12;j++)
+    // {
+    //    float tempx[j] = fabs(Ixpre[j]-Ix[j]);
+
+    // }
+
+    if (publishnow == 0 || flaginit==0)
     {
-      //esp_task_wdt_disable();
-      // disableCore0WDT();
-      avg_time_ms = Ping.averageTime();
-      Serial.print(avg_time_ms);
-      zeit2 = 10000 + millis();
-      if (avg_time_ms > 1000)
+      for (byte j = 0; j < 12; j++)
       {
-        digitalWrite(ledred, HIGH);
-        digitalWrite(ledgreen, LOW);
-        flagonline = 0;
-      }
-      else
-      {
-        digitalWrite(ledred, LOW);
-        digitalWrite(ledgreen, HIGH);
-
-        if (flagonline == 0)
+        if (iconfig[j] > 0)
         {
-          // publishnow=0;//si antes estaba offline publica de una vez
+          Whx[j] = Whx[j] + Px[j] * (zeit - prezeit) / 1000 / 3600;
         }
-        flagonline = 1;
-        Serial.print("updatecurrentTime.. ");
-        updatecurrentTime();
       }
+      publishnow = 1;
+      flagpub = 2;
     }
-    else
+    else // if not publishnow
     {
-      // disableCore0WDT();
-      Serial.print("no pong");
-      flagonline = 0;
-      digitalWrite(ledred, HIGH);
-      digitalWrite(ledgreen, LOW);
-    }
-  }
-
-  if (WiFi.status() != WL_CONNECTED)
-  {
-    //WiFi.mode( WIFI_MODE_NULL );
-    //////WiFi.disconnect();
-    delay(100);
-    Serial.println("no wifi ");
-    digitalWrite(ledred, HIGH);
-    digitalWrite(ledgreen, LOW);
-    flagonline = 0;
-    Serial.print("[INFO]: Start setup to internet connection ");
-    //WiFi.setHostname("M3TR");
-    //////WiFi.mode(WIFI_STA);
-
-    //////WiFi.begin();
-    //WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    // Only try 30 times to connect to the WiFi
-
-    int retries = 5;
-    while (WiFi.status() != WL_CONNECTED && retries > 1)
-    {
-      Serial.print(" m3tr wifi reconnecting...");
-      WiFi.begin(WIFI_SSID_m3tr, WIFI_PASSWORD2);
-      WiFi.reconnect();
-      delay(1000);
-      Serial.print(retries);
-      retries--;
-      checkserial();
-      sensors(); 
-    }
-
-    retries = 25;
-    while (WiFi.status() != WL_CONNECTED && retries > 1)
-    {
-      //WiFi.disconnect();
-      Serial.print(" wifi reconnecting...");
-      WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-      WiFi.reconnect();
-      delay(1000);
-      Serial.print(retries);
-      retries--;
-      checkserial();
-      sensors(); 
-    }
-
-    if (WiFi.status() != WL_CONNECTED)
-    {
-      flagonline = 0;
-      Serial.println("[ERROR]: Could not connect to WiFi");
-      APmode();
-    }
-
-    if (WiFi.status() == WL_CONNECTED)
-    {
-      //giveup=20;
-      WiFi.setAutoReconnect(true);
-      WiFi.persistent(true);
-      // bool ret = Ping.ping("www.google.com", 10);
-      //float avg_time_ms = Ping.averageTime();
-      if (avg_time_ms < 1000)
+      for (byte j = 0; j < 12; j++)
       {
-        Serial.print("ping: ");
-        Serial.println(avg_time_ms);
-        digitalWrite(ledred, LOW);
-        digitalWrite(ledgreen, HIGH);
-        Serial.println();
-        Serial.print("[INFO]: Connected to internet. IP: ");
-        Serial.print(WiFi.localIP());
-        Serial.print(", SSID: ");
-        Serial.print(WiFi.SSID());
-        Serial.print(", RSSI: ");
-        Serial.print(WiFi.RSSI());
-
-        flagonline = 1;
+        if (iconfig[j] > 0)
+        {
+          Whx[j] = Whx[j] + Px[j] * periodo / 1000 / 3600 * reportacada;
+        }
       }
     }
-  }
 
-  timeupdate++;
-  if (timeupdate > 60)
-  {
-    Serial.println("updatecurrentTime");
-    updatecurrentTime();
-    timeupdate = 0;
-  }
-}//end connectowifi
+    if (flagpub != 2)
+    {
+      flagpub = 0;
+    } // solo en caso de initialmessages (publishnow=0)
+
+    // if(variabilidad==1){
+    //     byte add=0;
+
+    //     if      (temp1 > 3.0) {flagpub++; }             // Volts de variación
+    //     else if (temp2 > deltai) {flagpub++; digitalWrite(ledgreen,LOW);}      // Amps de variación
+    //     else     {add=1;}                               // si pasan mas x veces sin reportar cambios, manda medicion de todas formas
+
+    //     if      (temp7 > deltai) {flagpub++; }             // Volts de variación
+    //     else if (temp8 > deltai) {flagpub++; }      // Amps de variación
+    //     else     {add=1;}                               // si pasan mas x veces sin reportar cambios, manda medicion de todas formas
+
+    //     if(add==1){flagpubcount++;}
+    //     if (flagpubcount > maxwait)
+    //     {
+    //       flagpub = 1;
+    //       flagpubcount = 0;
+    //     }
+    // } // end if variablilidad
+    // else
+    // {
+    prezeit = zeit;
+    addtobasket();
+
+    flagpubcount = 0; // para cosas de varibilidad=1 creo
+
+   
+
+    // reset variables
+    for (byte j = 0; j < 12; j++)
+    {
+      Ixprom[j] = 0;
+      Px[j] = 0;
+      Whx[j] = 0;
+      maxamps[j] = 0;
+    }
+    V1prom = V2prom = V3prom = 0;
+
+  } // end if
+} // end empaquetador
+
 
 void buttoncheck() //if pushbutton pressed for more than x times delay(millis), then clear wifi credentials and launch softAP
 {
@@ -1411,7 +2036,7 @@ void buttoncheck() //if pushbutton pressed for more than x times delay(millis), 
     if (buttonflag == 0)
     {
       Serial.print(" flowacum reset to cero,"); //if released go back but clear flowacum
-      flowacum = 0;
+     
       Serial.println(" returning..");
       digitalWrite(ledred, LOW);
       digitalWrite(ledgreen, HIGH);
@@ -1430,55 +2055,103 @@ void buttoncheck() //if pushbutton pressed for more than x times delay(millis), 
   }
 }//end buttoncheck
 
-void vbatcheck(){
-    digitalWrite(railEnable, HIGH); //LOW=ON
-    delay(20);
-    vbat=analogRead(lipocheck);
-    vbat=vbat*4/2267;           //from raw to volts
-    
-    if(flagnohayluz==0){
-        if(vbat<=4.2){publishnow=0; flagnohayluz=1;Serial.print(" no hay luz");} 
-    }
-    if(flagnohayluz==1){
-        if(vbat>=4.3){publishnow=0; flagnohayluz=0;}
-    }
+void send_universal_log(String params_univ)
+{
+  Serial.println(" ");
+  Serial.print("send to universal Log...");
+  HTTPClient http; //AQUI POR PRIMERA VEZ INTENTO MANDAR DATOS. 
+  String url = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID_UNIVERSAL + "/exec?" + params_univ; //QUIZA MODIFICAR ESTO BASE DE DATOS.
 
-    if (vbat < 3.65)
-    {
-      digitalWrite(railEnable,HIGH);  //LOW=ON
-    }
-    if (vbat > 3.7)
-    {
-      digitalWrite(railEnable,LOW);  //LOW=ON
-    }
-    
-    Serial.print(" vbat: ");Serial.print(vbat);
-}
+  digitalWrite(ledgreen, LOW);
+  digitalWrite(ledred, LOW);
+  digitalWrite(WDT, HIGH);
+  delay(10);
+  digitalWrite(WDT, LOW);
 
-void tempread(){
-  
-  sensor.requestTemperatures();
-  Serial.print("TEMPREAD is:");
-  flowtemp1 = sensor.getTempC();
-  Serial.println(flowtemp1); 
-  if (flowtemp1<0){flowtemp1=0;Serial.print(" tempread error (value<0), replacing with 0");}
-}
+  Serial.print(url); //Se refiere a la URL que ya definimos arriba. 
+  Serial.print(" Making a request");
+  //http.begin(url, root_ca); // Specify the URL and certificate
+  http.begin(url); // Specify the URL and certificate
+  Serial.print(" http.get:");
+  //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
+  //hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer 
+  //esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
+  httpCode = http.GET();
+  Serial.print (" DONE");
+  //esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
+  //disableCore0WDT();
+  http.end();
+  Serial.print(" with reply: ");
+  Serial.print (httpCode);
 
+  if (httpCode == 302 || httpCode == 200 || httpCode == -11)
+  {
+    digitalWrite(ledgreen, HIGH);
+    digitalWrite(ledred, LOW);
+    Serial.println("universal log sent.");
+  }
+  else
+  {
+    digitalWrite(WDT, HIGH);
+    delay(10);
+    digitalWrite(WDT, LOW);
+    // flag_online=0;
+    // counterstatus--;
+    // onlinecheck3();
+    Serial.print("sendData sending again...");
+    HTTPClient http; //AQUI VUELVE A INICIAR EL PROCESO PARA INTENTAR MANDAR DATOS. 
+    String url = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID_UNIVERSAL + "/exec?" + params_univ; //QUIZA MODIFICAR ESTO BASE DE DATOS. 
 
+    Serial.print(url);
+    Serial.print(" Making a request");
+    //http.begin(url, root_ca); // Specify the URL and certificate
+    http.begin(url); // Specify the URL and certificate
+    Serial.print(" http.get:");
+    // esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
+    // hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer
+    // esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
+    httpCode = http.GET();
+    Serial.print(" DONE");
+    // esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
+    // disableCore0WDT();
+    http.end();
+    Serial.print(" with reply: ");
+    Serial.println(httpCode);
+  }
 
+  if (httpCode == 302 || httpCode == 200 || httpCode == -11)
+  {
+    digitalWrite(ledgreen, HIGH);
+    digitalWrite(ledred, LOW);
+  }
+  else
+  {
+    digitalWrite(ledgreen, LOW);
+    digitalWrite(ledred, HIGH);
+    flag_online = 0;
+    Serial.println(" could not sendData, marked as unsent");
+    // counterstatus--;
+    // onlinecheck3();
+  }
+
+}//end send_universal_log
 
 void sendData(String params)
 {
   Serial.println("sendData sending...");
   HTTPClient http;
-  String url = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID + "/exec?" + params;
+  String url = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID + "/exec?" + params; //QUIZA MODIFICAR ESTO BASE DE DATOS. 
 
-  digitalWrite(ledgreen,LOW);
-  digitalWrite(ledred,LOW);
+  digitalWrite(ledgreen, LOW);
+  digitalWrite(ledred, LOW);
+  digitalWrite(WDT, HIGH);
+  delay(10);
+  digitalWrite(WDT, LOW);
 
   Serial.print(url);
   Serial.print("Making a request");
-  http.begin(url, root_ca); //Specify the URL and certificate
+  //http.begin(url, root_ca); // Specify the URL and certificate
+  http.begin(url); // Specify the URL and certificate
   Serial.print("http.get:");
   //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
   //hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer 
@@ -1490,8 +2163,7 @@ void sendData(String params)
   http.end();
   Serial.print(" with reply: ");
   Serial.println (httpCode);
-  
-  
+
   // if (httpCode == 302 || httpCode == 200)
   // {
   //  // flowtotal = 0; //reset flowshort (flowtotal) para que pueda ir contando nuevamente mientras google responde
@@ -1503,7 +2175,7 @@ void sendData(String params)
   // http.begin(url, root_ca); //Specify the URL and certificate
   // Serial.print("http.get:");
   // //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
-  // //hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer 
+  // //hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer
   // //esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
   // httpCode = http.GET();
   // Serial.println("A VER");
@@ -1511,1464 +2183,557 @@ void sendData(String params)
   // //disableCore0WDT();
   // http.end();
   // }
-  
-  
-  if (httpCode == 302 || httpCode == 200 || httpCode == -11)
-  {
-      digitalWrite(ledgreen,HIGH);
-      digitalWrite(ledred,LOW);
-   // flowtotal = 0; //reset flowshort (flowtotal) para que pueda ir contando nuevamente mientras google responde
-  }
-  else
-  {
-    //flagonline=0;
-    //counterstatus--;
-   // onlinecheck3();
-  Serial.println("sendData sending again...");
-  HTTPClient http;
-  String url = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID + "/exec?" + params;
-
-  Serial.print(url);
-  Serial.print("Making a request");
-  http.begin(url, root_ca); //Specify the URL and certificate
-  Serial.print("http.get:");
-  //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
-  //hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer 
-  //esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
-  httpCode = http.GET();
-  Serial.print (" DONE");
-  //esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
-  //disableCore0WDT();
-  http.end();
-  Serial.print(" with reply: ");
-  Serial.println (httpCode);
-  }
 
   if (httpCode == 302 || httpCode == 200 || httpCode == -11)
   {
-    digitalWrite(ledgreen,HIGH);
-    digitalWrite(ledred,LOW);
-    // flowtotal = 0; //reset flowshort (flowtotal) para que pueda ir contando nuevamente mientras google responde
+    digitalWrite(ledgreen, HIGH);
+    digitalWrite(ledred, LOW);
   }
   else
   {
-    digitalWrite(ledgreen,LOW);
-    digitalWrite(ledred,HIGH);
-    flagonline = 0;
-    //counterstatus--;
-   //onlinecheck3();
+    digitalWrite(WDT, HIGH);
+    delay(10);
+    digitalWrite(WDT, LOW);
+    // flag_online=0;
+    // counterstatus--;
+    // onlinecheck3();
+    Serial.println("sendData sending again...");
+    HTTPClient http; //Vuelve a intentar a enviar la información. 
+    String url = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID + "/exec?" + params; //QUIZA MODIFICAR ESTO BASE DE DATOS. 
+
+    Serial.print(url);
+    Serial.print("Making a request");
+    //http.begin(url, root_ca); // Specify the URL and certificate
+    http.begin(url); // Specify the URL and certificate
+    Serial.print("http.get:");
+    // esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
+    // hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer
+    // esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
+    httpCode = http.GET();
+    Serial.print(" DONE");
+    // esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
+    // disableCore0WDT();
+    http.end();
+    Serial.print(" with reply: ");
+    Serial.println(httpCode);
   }
 
-  flowtotal = 0;
-}//end senddata
-
-void publicadorm3tr()
-{
-  Serial.println(" publicador");
-  digitalWrite(ledred, HIGH);
-  digitalWrite(ledgreen, LOW);
-  updatecurrentTime(); //timestamp en formato epoch para enviar en el paquete
-  addtobasket();
-
-
-  if (publishconfig == 1)
-  { 
-    // pubSubPayload = String::format("%d,%d,%.2f,%.2f,%.2f,%.2f", config, currentTime, flowtotal , flowtemp1, flowacum , vbat);
-    Serial.print("payload: ");
-    Serial.print("config: ");
-    Serial.print(publishconfig);
-    Serial.print(" flowtotal: ");
-    Serial.print(flowtotal);
-    Serial.print(" temp1: ");
-    Serial.print(flowtemp1);
-    Serial.print(" vbat: ");
-    Serial.print(vbat);
-    Serial.print(" ");
+  if (httpCode == 302 || httpCode == 200 || httpCode == -11)
+  {
+    digitalWrite(ledgreen, HIGH);
+    digitalWrite(ledred, LOW);
   }
-    flagsend=1;
-} //end publicador
-
-void empaquetador(){       //milis          //promedia las mediciones de cada periodo y publica
-    if (Particle.connected()) {digitalWrite(ledred,LOW); digitalWrite(ledgreen,HIGH);}  
-    if (Particle.disconnected()){ digitalWrite(ledred,HIGH); digitalWrite(ledgreen,LOW); }                     //red
-    if(initialmessages==0){flaginit=1;}                     //publica varias mediciones inicialmente para confirmar llegada de datos a la nube
-    else{flaginit=0; initialmessages--;delay(10000);I1a=I2a=I3a=I4a=I5a=Wh1=Wh2=Wh3=Wh4=Wh5=0;}
-    
-    int periodo = 10000;//antes 9985
-    
-    if((zeit-prezeit) >     1000 * processflag)     { processflag++; Particle.process(); Serial.print("."); }       
-    if((zeit-prezeit) >      periodo   *  2  * publishnow * onetimer)     { onetimer++; wificheck(); }        //cada minuto checa wifi
-    
-    
-    
-    if((zeit-prezeit) >      periodo   *   reportacada * flaginit * publishnow)     {  //cada x milisegundos promedia las mediciones que ha estado agregando a addup() para promediar
-        
-        wificheck();
-        
-        
-        if (variabilidad == 1){wificheck();}
-       
-        processflag=1;
-        onetimer=1;
-        average();              //promedia todas las lecturas realizadas durante el periodo
-        
-        float temp1 = fabs(V1pre-Vrms1);
-        float temp2 = fabs(I1pre-I1a);
-        
-        float temp3 = fabs(V2pre-Vrms2);
-        float temp4 = fabs(I2pre-I2a);
-        
-        float temp5 = fabs(V3pre-Vrms3);
-        float temp6 = fabs(I3pre-I3a);
-        
-        float temp7 = fabs(I4pre-I4a);
-        
-        float temp8 = fabs(I5pre-I5a);
-        
-        
-        if(publishnow==0){
-            Wh1 = Wh1 + Vrms1 * I1a * (zeit-prezeit)/1000/3600  ;
-            Wh2 = Wh2 + Vrms2 * I2a * (zeit-prezeit)/1000/3600  ;
-            Wh3 = Wh3 + Vrms3 * I3a * (zeit-prezeit)/1000/3600  ;
-            Wh4 = Wh4 + Vrms1 * I4a * (zeit-prezeit)/1000/3600  ;
-            Wh5 = Wh5 + Vrms2 * I5a * (zeit-prezeit)/1000/3600  ;
-            publishnow=1;flagpub=2;
-            }
-            else{
-                Wh1 = Wh1 + Vrms1 * I1a * periodo/1000/3600  *reportacada;
-                Wh2 = Wh2 + Vrms2 * I2a * periodo/1000/3600  *reportacada;
-                Wh3 = Wh3 + Vrms3 * I3a * periodo/1000/3600  *reportacada;
-                Wh4 = Wh4 + Vrms1 * I4a * periodo/1000/3600  *reportacada;
-                Wh5 = Wh5 + Vrms2 * I5a * periodo/1000/3600  *reportacada;
-            }
-        
-        //if(config == 12){           Wh4 = Wh4 + Vrms1 * I4a * periodo/1000/3600 *reportacada;  } 
-        //else if(config == 13){      Wh4 = Wh4 + Vrms2 * I4a * periodo/1000/3600 *reportacada;  } 
-        //else if(config == 14){      Wh4 = Wh4 + Vrms3 * I4a * periodo/1000/3600 *reportacada;  } 
-       // else if(config == 15){      Wh4 = Wh4 + Vrms1 * I4a * periodo/1000/3600 *reportacada; Wh5 = Wh5 + Vrms2 * I5a * periodo/1000/3600 *reportacada;  } 
-        
-        //Wh4 = Wh4 + Vrms? * Irms4 * 9985/1000/3600;
- 
-        if (flagpub!=2){flagpub=0;}//solo en caso de initialmessages (publishnow=0)
-        if(variabilidad==1){
-            byte add=0;
-            
-            if      (temp1 > 3.0) {flagpub++; }             // Volts de variación
-            else if (temp2 > deltai) {flagpub++; digitalWrite(ledgreen,LOW);}      // Amps de variación
-            else     {add=1;}                               // si pasan mas x veces sin reportar cambios, manda medicion de todas formas
-        
-            if      (temp3 > 3.0) {flagpub++; }             // Volts de variación
-            else if (temp4 > deltai) {flagpub++; digitalWrite(ledgreen,LOW);}      // Amps de variación
-            else     {add=1;}                               // si pasan mas x veces sin reportar cambios, manda medicion de todas formas
-        
-            if      (temp5 > 3.0) {flagpub++; }             // Volts de variación
-            else if (temp6 > deltai) {flagpub++; }      // Amps de variación
-            else     {add=1;}                               // si pasan mas x veces sin reportar cambios, manda medicion de todas formas
-        
-            if      (temp7 > deltai) {flagpub++; }             // Volts de variación
-            else if (temp8 > deltai) {flagpub++; }      // Amps de variación
-            else     {add=1;}                               // si pasan mas x veces sin reportar cambios, manda medicion de todas formas
-        
-            if(add==1){flagpubcount++;}
-            if( flagpubcount > maxwait) {flagpub=1; flagpubcount=0; }
-        }//end if variablilidad
-        else {
-            publicador(); flagpubcount=0; Wh1=Wh2=Wh3=Wh4=Wh5=0; 
-        }
-        
-        if (variabilidad == 1){
-            if (flagpub >= 1 || flaginit==0)   
-            {   
-                V1pre=Vrms1; I1pre=I1a; 
-                V2pre=Vrms2; I2pre=I2a;
-                V3pre=Vrms3; I3pre=I3a;
-                I4pre=I4a;
-                I5pre=I5a;
-                flagpub=0;
-                publicador(); flagpubcount=0; Wh1=Wh2=Wh3=Wh4=Wh5=0; 
-            }
-        }
-
-        Vrmsprom1 = Irmsprom1 = Powerprom1 =  0;
-        Vrmsprom2 = Irmsprom2 = Powerprom2 =  0;
-        Vrmsprom3 = Irmsprom3 = Powerprom3 =  0;
-                    Irmsprom4 = Powerprom4 =  0;       //reset variables
-                    Irmsprom5 = Powerprom5 =  0;
-        prezeit=zeit;    //reset tiempo de 1 seg
-    }//end if
-}//end empaquetador
-
-void empaquetadorm3tr(){       //milis          //promedia las mediciones de cada periodo y publica
-  Serial.print("empaquetador ");
-  int flaginit=0;
-
-  // if (WiFi.status() == WL_CONNECTED)
-  // {
-  //   // bool ret = Ping.ping("www.google.com", 10);
-  //   //float avg_time_ms = Ping.averageTime();
-  //   if (avg_time_ms < 1000)
-  //   {
-  //     Serial.print("Wifi OK, ");
-  //     digitalWrite(ledred, LOW);
-  //     digitalWrite(ledgreen, HIGH);
-  //     flagonline=1;
-  //   }
-  // }
-
-  // else
-  // {
-  //   Serial.print("Wif NOT ready, ");
-  //   digitalWrite(ledred, HIGH);
-  //   digitalWrite(ledgreen, LOW);
-
-  //   flagonline = 0;
-  // } //WiFi.connect();}
-
-  // //if(flagonline==0){
-  // //  publishnow=0;
-  // //  flagonline=1;
-  // //}
-
-  if(initialmessages==0){flaginit=1;}                     //publica varias mediciones inicialmente para confirmar llegada de datos a la nube
-  else{flaginit=0; initialmessages--;delay(1000);}
-      
-  flowtotal = flowtotal + flow/1000;
-  flowacum = flowacum+flowtotal;
-
-  //old if(flow>=0.1){publishnow=0;}
-  if(flow>=0.1 || bufhotflow>=0.1 || bufnivo1 > 0.0 ){publishnow=0;}
-
-    
-  Serial.print (" flowtotal: ");Serial.print(flowtotal); Serial.print (" flowacum: ");Serial.print(flowacum);
-  long periodo = multiplos*1000;
-  if((zeit-prezeit) >      periodo   *   reportacada * flaginit * publishnow)     { 
-
-//https://arduino.stackexchange.com/questions/12587/how-can-i-handle-the-millis-rollover
-
-
-    //old if((flowtotal >= 0.0) || flagpubcount > maxwait ) { flagpub=1; } 
-    if((flowtotal >= 0.0) || flagpubcount > maxwait ) { flagpub=1; }    
-    else {
-      if(publishnow==0){ flagpub=1; }
-      else {flagpub=0; flagpubcount++;}
-    }
-        
-    if (flagpub == 1) {
-      vbatcheck();
-      tempread();
-      //en vez de publicador() voy a mandar el dato a una cubeta como si siempre estuviera offline. el otro core va a estar sacando de la cubeta cuando hay ainternet y si no se espera.
-      publicador(); flagpubcount=0; //antes estaba aqui flowtotal=0; pero lo movi adespues de sendData
-    } 
-    publishnow=1; 
-    prezeit=zeit;
-  }//end if
-  
-  Serial.println(" end empaquetador ");
-}//end empaquetador
-
-void area(){
-    //en lugar de obtener unicamente max y min, se calcula el area bajo las curvas de corriente ya que no siempre siguen una forma senoidal y pueden generar resultados erroneos.
-    iarea1=iarea2=iarea3=iarea4=iarea5=0;
-    
-    for(unsigned int m=0;m<resolution;m++){
-     long istep=0;
-     
-     //ojo para reducir "ruido" de corrientes pequenas, probar quitando la resistencia de 1M ohm entre el pin analigico del photon que mide las corrientes y tambien probar aumentar el  if (istep<2){istep=0;} a  istep< 3 o 4
-     
-     istep=u[m]-2048; istep=abs(istep);  if (istep<atenuacion){istep=0;} iarea1=iarea1+istep;
-     istep=v[m]-2048; istep=abs(istep);  if (istep<atenuacion){istep=0;} iarea2=iarea2+istep;
-     istep=w[m]-2048; istep=abs(istep);  if (istep<atenuacion){istep=0;} iarea3=iarea3+istep;
-     istep=t[m]-2048; istep=abs(istep);  if (istep<atenuacion){istep=0;} iarea4=iarea4+istep;
-     istep=s[m]-2048; istep=abs(istep);  if (istep<atenuacion){istep=0;} iarea5=iarea5+istep;
-    }
-}//end area
-
-void sync1(){               //este syn sirve muy bien, solo falta ajustarlo para que empiece mas cerca de 2048 o bien hacer el analisis de power factor buscando el valor de 2048 y a partir de aho hacer el conteo de cursor.
-    //Serial.println("-1-");
-    byte dowhile = 0;
-    byte go=0;
-    syncstatus1=0;   
-    prezeitsync=micros();
-    do
-    {
-        //Serial.println("go1");
-        while(go==0){
-            int ramp=0;
-            while(ramp<100){
-                //Serial.println(ramp);
-                analogread = analogRead(A0);
-                if(analogread>1800 && analogread<2000){ramp=101;}
-                else {ramp++;}
-                
-                zeitsync=micros();
-                if((zeitsync-prezeitsync) > 30000) { dowhile=1; ramp=102; go=1; syncstatus1=2;}//syncstatus=2 significa que no pudo sincronizarse
-            }
-            
-            if(ramp==101){
-                int temporal = analogRead(A0);    
-                if(temporal>analogread){
-                    go=1;
-                    dowhile=1;
-                    syncstatus1=1;              //syncstatus=1 significa que si pudo sincronizarse
-                    //Serial.println("!1");
-                }
-                else 
-                {
-                    delay(5);    
-                }
-            }//END IF
-        }//end while ramp
-    } while(dowhile == 0);
-}//end sync1
-void sync2(){               //este syn sirve muy bien, solo falta ajustarlo para que empiece mas cerca de 2048 o bien hacer el analisis de power factor buscando el valor de 2048 y a partir de aho hacer el conteo de cursor.
-    //Serial.println("-2-");
-    byte dowhile = 0;
-    byte go=0;
-    syncstatus2=0;   
-    prezeitsync=micros();
-    do
-    {
-        //Serial.println("go2");
-        while(go==0){
-            int ramp=0;
-            while(ramp<100){
-                //Serial.println(ramp);
-                analogread = analogRead(A1);
-                if(analogread>1800 && analogread<2000){ramp=101;}
-                else {ramp++;}
-                
-                zeitsync=micros();
-                if((zeitsync-prezeitsync) > 30000) { dowhile=1; ramp=102; go=1; syncstatus2=2;}//syncstatus=2 significa que no pudo sincronizarse
-            }
-            
-            if(ramp==101){
-                int temporal = analogRead(A1);    
-                if(temporal>analogread){
-                    go=1;
-                    dowhile=1;
-                    syncstatus2=1;              //syncstatus=1 significa que si pudo sincronizarse
-                    //Serial.println("!2");
-                }
-                else 
-                {
-                    delay(5);    
-                }
-            }//END IF
-        }//end while ramp
-    } while(dowhile == 0);
-}//end sync2
-void sync3(){               //este syn sirve muy bien, solo falta ajustarlo para que empiece mas cerca de 2048 o bien hacer el analisis de power factor buscando el valor de 2048 y a partir de aho hacer el conteo de cursor.
-    //Serial.println("-3-");
-    byte dowhile = 0;
-    byte go=0;
-    syncstatus3=0;   
-    prezeitsync=micros();
-    do
-    {
-        //Serial.println("go3");
-        while(go==0){
-            int ramp=0;
-            while(ramp<100){
-                //Serial.println(ramp);
-                analogread = analogRead(A2);
-                if(analogread>1800 && analogread<2000){ramp=101;}
-                else {ramp++;}
-                
-                zeitsync=micros();
-                if((zeitsync-prezeitsync) > 30000) { dowhile=1; ramp=102; go=1; syncstatus3=2;}//syncstatus=2 significa que no pudo sincronizarse
-            }
-            
-            if(ramp==101){
-                int temporal = analogRead(A2);    
-                if(temporal>analogread){
-                    go=1;
-                    dowhile=1;
-                    syncstatus3=1;              //syncstatus=1 significa que si pudo sincronizarse
-                    //Serial.println("!3");
-                }
-                else 
-                {
-                    delay(5);    
-                }
-            }//END IF
-        }//end while ramp
-    } while(dowhile == 0);
-}//end sync3
-void sync4(){               //este syn sirve muy bien, solo falta ajustarlo para que empiece mas cerca de 2048 o bien hacer el analisis de power factor buscando el valor de 2048 y a partir de aho hacer el conteo de cursor.
-    //Serial.println("-3-");
-    byte dowhile = 0;
-    byte go=0;
-    syncstatus4=0;   
-    prezeitsync=micros();
-    do
-    {
-        //Serial.println("go3");
-        while(go==0){
-            int ramp=0;
-            while(ramp<100){
-                //Serial.println(ramp);
-                analogread = analogRead(A0);
-                if(analogread>1800 && analogread<2000){ramp=101;}
-                else {ramp++;}
-                
-                zeitsync=micros();
-                if((zeitsync-prezeitsync) > 30000) { dowhile=1; ramp=102; go=1; syncstatus4=2;}//syncstatus=2 significa que no pudo sincronizarse
-            }
-            
-            if(ramp==101){
-                int temporal = analogRead(A0);    
-                if(temporal>analogread){
-                    go=1;
-                    dowhile=1;
-                    syncstatus4=1;              //syncstatus=1 significa que si pudo sincronizarse
-                    //Serial.println("!3");
-                }
-                else 
-                {
-                    delay(5);    
-                }
-            }//END IF
-        }//end while ramp
-    } while(dowhile == 0);
-}//end sync3
-void sync5(){               //este syn sirve muy bien, solo falta ajustarlo para que empiece mas cerca de 2048 o bien hacer el analisis de power factor buscando el valor de 2048 y a partir de aho hacer el conteo de cursor.
-    //Serial.println("-3-");
-    byte dowhile = 0;
-    byte go=0;
-    syncstatus5=0;   
-    prezeitsync=micros();
-    do
-    {
-        //Serial.println("go3");
-        while(go==0){
-            int ramp=0;
-            while(ramp<100){
-                //Serial.println(ramp);
-                analogread = analogRead(A1);
-                if(analogread>1800 && analogread<2000){ramp=101;}
-                else {ramp++;}
-                
-                zeitsync=micros();
-                if((zeitsync-prezeitsync) > 30000) { dowhile=1; ramp=102; go=1; syncstatus5=2;}//syncstatus=2 significa que no pudo sincronizarse
-            }
-            
-            if(ramp==101){
-                int temporal = analogRead(A1);    
-                if(temporal>analogread){
-                    go=1;
-                    dowhile=1;
-                    syncstatus5=1;              //syncstatus=1 significa que si pudo sincronizarse
-                    //Serial.println("!3");
-                }
-                else 
-                {
-                    delay(5);    
-                }
-            }//END IF
-        }//end while ramp
-    } while(dowhile == 0);
-}//end sync3
-void sync6(){               //este syn sirve muy bien, solo falta ajustarlo para que empiece mas cerca de 2048 o bien hacer el analisis de power factor buscando el valor de 2048 y a partir de aho hacer el conteo de cursor.
-    //Serial.println("-3-");
-    byte dowhile = 0;
-    byte go=0;
-    syncstatus6=0;   
-    prezeitsync=micros();
-    do
-    {
-        //Serial.println("go3");
-        while(go==0){
-            int ramp=0;
-            while(ramp<100){
-                //Serial.println(ramp);
-                analogread = analogRead(A2);
-                if(analogread>1800 && analogread<2000){ramp=101;}
-                else {ramp++;}
-                
-                zeitsync=micros();
-                if((zeitsync-prezeitsync) > 30000) { dowhile=1; ramp=102; go=1; syncstatus6=2;}//syncstatus=2 significa que no pudo sincronizarse
-            }
-            
-            if(ramp==101){
-                int temporal = analogRead(A2);    
-                if(temporal>analogread){
-                    go=1;
-                    dowhile=1;
-                    syncstatus6=1;              //syncstatus=1 significa que si pudo sincronizarse
-                    //Serial.println("!3");
-                }
-                else 
-                {
-                    delay(5);    
-                }
-            }//END IF
-        }//end while ramp
-    } while(dowhile == 0);
-}//end sync3
-
-void maxmin(){
-    vmax1=vmax2=vmax3=0; 
-    vmax4=vmax5=vmax6=0; 
-    imax1=imax2=imax3=imax4=imax5=0; 
-   
-    vmin1=vmin2=vmin3=5000;
-    vmin4=vmin5=vmin6=5000;
-    imin1=imin2=imin3=imin4=imin5=5000;
-    
-    //ojo, ya no se necesita calcular max/min de las corrientes porque ahora se hace con area...
-   
-    
-    for(unsigned int m=0;m<resolution;m++){
-      vmax1=max(x[m],vmax1);
-      vmin1=min(x[m],vmin1);
-      vmax2=max(y[m],vmax2);
-      vmin2=min(y[m],vmin2);
-      vmax3=max(z[m],vmax3);
-      vmin3=min(z[m],vmin3);
-      
-      vmax4=max(xx[m],vmax4);
-      vmin4=min(xx[m],vmin4);
-      vmax5=max(yy[m],vmax5);
-      vmin5=min(yy[m],vmin5);
-      vmax6=max(zz[m],vmax6);
-      vmin6=min(zz[m],vmin6);
-      
-      imax1=max(u[m],imax1);    
-      imax2=max(v[m],imax2);    
-      imax3=max(w[m],imax3);   
-      imax4=max(t[m],imax4);    
-      imax5=max(s[m],imax5);    
-      
-      imin1=min(u[m],imin1);    
-      imin2=min(v[m],imin2);    
-      imin3=min(w[m],imin3);   
-      imin4=min(t[m],imin4);   
-      imin5=min(s[m],imin5);   
-    }
-}//end maxmin1
-
-void powerfactor(){
-   // Serial.println("ppowerfactor");
-    int pfable1=0;
-    int pfable2=0;
-    int pfable3=0;
-    int pfable4=0;
-    int pfable5=0;
-    int m=0;
-    int n=0;
-    cursorv1=cursori1=cursorv2=cursori2=cursorv3=cursori3=cursori4=cursori5=cursorv1_=cursorv2_=cursorv3_=0;
-    //pf1=pf2=pf3=pf4=pf5=1.01;
-
-    // if(syncstatus1==1 && vmax1 > 2200 && vmin1 < 1900 && imax1 > 2055  &&  imin1 < 2040) { pfable1=1; }       //si hay suficiente amplitud en las curvas y sync funciono bien
-    // if(syncstatus2==1 && vmax2 > 2200 && vmin2 < 1900 && imax2 > 2055  &&  imin2 < 2040) { pfable2=1; }
-    // if(syncstatus3==1 && vmax3 > 2200 && vmin3 < 1900 && imax3 > 2055  &&  imin3 < 2040) { pfable3=1; }
-    // if(syncstatus4==1 && vmax4 > 2200 && vmin4 < 1900 && imax4 > 2055  &&  imin4 < 2040) { pfable4=1; }         //config=15
-    // if(syncstatus5==1 && vmax5 > 2200 && vmin5 < 1900 && imax5 > 2055  &&  imin5 < 2040) { pfable5=1; }         //config=15
-    
-    if(syncstatus1==1)  { pfable1=1; }       //si hay suficiente amplitud en las curvas y sync funciono bien
-    if(syncstatus2==1)  { pfable2=1; }
-    if(syncstatus3==1)  { pfable3=1; }
-    if(syncstatus4==1)  { pfable4=1; }         //config=15
-    if(syncstatus5==1)  { pfable5=1; }         //config=15
-    //if(syncstatus6==1 && vmax6 > 2200 && vmin6 < 1900 && imax5 > 2055  &&  imin5 < 2040) { pfable6=1; }   //buga no se si sea imax 5 y imin5
-    
-    
-     //para calcular power factor:
-    if(pfable1==1){
-        m=0; cursorv1=0;
-        while(x[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
-        while(x[m]>2048){ cursorv1++; m++; }            //cuenta las mediciones que sean mayores a 2048, deberian ser aprox 47 o resolution/2
-       // Serial.print(" cursorv1: ");Serial.print(cursorv1);Serial.print(" m= ");Serial.println(m);
-        n=0; cursori1=0;
-        while(u[n]<2048){ n++; }                        //descarta valores iniciales menores a 2048
-        while(u[n]>2048){ cursori1++; n++; }
-        //Serial.print("cursori1: ");Serial.print(cursori1);Serial.print(" n= ");Serial.println(n);
-      
-        // if(m>40 && m<60 && abs(m-n)<15){
-        //     float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
-        //     pf1 = cos(pfactor);Serial.print("pf1: ");Serial.print(pf1);
-        // }
-        
-       // if(m>40 && m<60){
-            float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
-            pf1 = cos(pfactor);Serial.print("pf1: ");Serial.print(pf1);
-       // }
-        
-        
- 
-
-        //debugging power factor: temporal
-         Serial.println("");
-        for(int i=0;i<resolution;i++)
-        {
-            Serial.print(x[i]);Serial.print(",");
-        }
-        Serial.println("");
-        
-        for(int i=0;i<resolution;i++)
-        {
-            Serial.print(u[i]);Serial.print(",");
-        }
-        Serial.println("");
-        
-    }
-    //ojo, falta decidir que mostrar si pfableX==0
-    
-    
-    //voltaje 2 y corriente 2
-    if(pfable2==1){
-        m=0;
-        while(y[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
-     //   Serial.print("m= ");Serial.println(m); 
-        while(y[m]>2048){ cursorv2++; m++; }            //cuenta las mediciones que sean mayores a 2048, deberian ser aprox 47 o resolution/2
-        n=0;
-        while(v[n]<2048){ n++; }                        //descarta valores iniciales menores a 2048
-      //  Serial.print("m= ");Serial.println(m); 
-        while(v[n]>2048){ cursori2++; n++; }            //cuenta las mediciones que sean mayores a 2048, dependiendo del desfase sera mayor o menor a 47
-        // if(m>40 && m<60 && abs(m-n)<15){
-        //     float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
-        //     pf2 = cos(pfactor);Serial.print(" pf2: ");Serial.print(pf2);
-        // }
-        
-        
-        if(m>40 && m<60 ){
-            float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
-            pf2 = cos(pfactor);Serial.print(" pf2: ");Serial.print(pf2);
-        }
-        
-    }
-
-
-    //voltaje 3 y corriente 3
-    if(pfable3==1){
-        m=0;
-        while(z[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
-     //   Serial.print("m= ");Serial.println(m); 
-        while(z[m]>2048){ cursorv3++; m++; }            //cuenta las mediciones que sean mayores a 2048, deberian ser aprox 47 o resolution/2
-        n=0;
-        while(w[n]<2048){ n++; }                        //descarta valores iniciales menores a 2048
-     //   Serial.print("m= ");Serial.println(m); 
-        while(w[n]>2048){ cursori3++; n++; }            //cuenta las mediciones que sean mayores a 2048, dependiendo del desfase sera mayor o menor a 47
-        // if((m-n)<15){
-        //     float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
-        //     pf3 = cos(pfactor);Serial.print(" pf3: ");Serial.print(pf3);
-        // }
-        
-            
-            float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
-            pf3 = cos(pfactor);Serial.print(" pf3: ");Serial.print(pf3);
-        
-    }
-
-
-
-
-    if(config==15){
-        if(pfable4==1){
-            m=0;
-            while(xx[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
-         //   Serial.print("m= ");Serial.println(m); 
-            while(xx[m]>2048){ cursorv1_++; m++; }    
-            n=0;
-            while(t[n]<2048){ n++; }          // t o s?             //descarta valores iniciales menores a 2048
-          //  Serial.print("m= ");Serial.println(m); 
-            while(t[n]>2048){ cursori4++; n++; } 
-            if((m-n)<15){
-                float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
-                pf4 = cos(pfactor);Serial.print(" pf4: ");Serial.print(pf4);
-            }
-        }
-
-        
-        if(pfable5==1){
-            m=0;
-            while(yy[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
-         //   Serial.print("m= ");Serial.println(m); 
-            while(yy[m]>2048){ cursorv2_++; m++; }    
-            n=0;
-            while(s[n]<2048){ n++; }          // t o s?             //descarta valores iniciales menores a 2048
-          //  Serial.print("m= ");Serial.println(m); 
-            while(s[n]>2048){ cursori5++; n++; } 
-            if((m-n)<15){
-                float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
-                pf5 = cos(pfactor);Serial.print(" pf5: ");Serial.println(pf5);
-            }
-        }
-    }
-    
-    
-    
-    if(config==17){
-        if(pfable4==1){
-            m=0;
-            while(yy[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
-         //   Serial.print("m= ");Serial.println(m); 
-            while(yy[m]>2048){ cursorv2_++; m++; }    
-            n=0;
-            while(t[n]<2048){ n++; }          // t o s?             //descarta valores iniciales menores a 2048
-          //  Serial.print("m= ");Serial.println(m); 
-            while(t[n]>2048){ cursori4++; n++; } 
-            if((m-n)<15){
-                float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
-                pf4 = cos(pfactor);Serial.print(" pf4: ");Serial.print(pf4);
-            }
-        }
-
-        
-        if(pfable5==1){
-            m=0;
-            while(zz[m]<2048){ m++; }                        //descarta valores iniciales menores a 2048
-         //   Serial.print("m= ");Serial.println(m); 
-            while(zz[m]>2048){ cursorv3_++; m++; }    
-            n=0;
-            while(s[n]<2048){ n++; }          // t o s?             //descarta valores iniciales menores a 2048
-          //  Serial.print("m= ");Serial.println(m); 
-            while(s[n]>2048){ cursori5++; n++; } 
-            if((m-n)<15){
-                float pfactor= 3.1416/47*(m-n-1);//47 es aprox la mitad de resolution = 94, n-1 es para ajustar por que la medicion de corriente es intercalada con la de voltaje.
-                pf5 = cos(pfactor);Serial.print(" pf5: ");Serial.println(pf5);
-            }
-        }
-    }
-    
-    
-    
-}//end powerfactor
-
-void readcycle(){
-    
-
-    
-    
-    
-    // pinMode(A3, INPUT_PULLDOWN);                 //I5
-    // pinMode(A4, INPUT_PULLDOWN);                 //I1 antes 4
-    // pinMode(A5, INPUT_PULLDOWN);                 //I2 antes 3
-    // pinMode(A6, INPUT_PULLDOWN);                 //I3 antes 2
-    // pinMode(A7, INPUT_PULLDOWN);                 //I4 antes 1
-    
-    
-    switch(config){
-      case 1:          //f1 y c1            
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);    
-            u[r] = analogRead(I1); 
-            y[r] = z[r] = v[r] = w[r] = t[r] = s[r] = 2048;
-          }
-      break;
-
-      case 2:           //f1 y c1, luego lee f1 y c2
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);    
-            u[r] = analogRead(I1);
-          }
-          sync1();
-          for(unsigned int r=0; r<resolution; r++){
-            xx[r] = analogRead(V1);
-            v[r] = analogRead(I2);
-          }
-      break;
-      
-      case 5:           //f1 y c1, luego lee f1 y c2
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);    
-            u[r] = analogRead(I1);
-          }
-          sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);    
-            v[r] = analogRead(I2);
-          }
-          sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);    
-            w[r] = analogRead(I3);
-          }
-          sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);    
-            t[r] = analogRead(I4);
-          }
-          sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);    
-            s[r] = analogRead(I5);
-          }
-
-      break;
-
-      case 6:          //f1 y c1, f2 y c2
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);
-            u[r] = analogRead(I1);
-          }
-        sync2();
-        for(unsigned int r=0; r<resolution; r++){
-            y[r] = analogRead(V2);
-            v[r] = analogRead(I2);
-          }
-      break;
-
-      case 7:          //f1->c1, f2->c2, c3=generador ligado a f1
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);
-            u[r] = analogRead(I1);
-          }
-        sync2();
-        for(unsigned int r=0; r<resolution; r++){
-            y[r] = analogRead(V2);
-            v[r] = analogRead(I2);
-          }
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            xx[r] = analogRead(V1);
-            w[r] = analogRead(I3);
-          }
-      break;
-
-      case 8:         //f1->c1, f2->c2, c3=generador ligado a f2
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);
-            u[r] = analogRead(I1);
-          }
-        sync2();
-        for(unsigned int r=0; r<resolution; r++){
-            y[r] = analogRead(V2);
-            v[r] = analogRead(I2);
-          }
-        sync2();
-        for(unsigned int r=0; r<resolution; r++){
-            xx[r] = analogRead(V2);
-            w[r] = analogRead(I3);
-          }
-      break;
-
-      case 11:             //f1->c1, f2->c2, f3->c3
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);
-            u[r] = analogRead(I1);
-          }
-        sync2();
-        for(unsigned int r=0; r<resolution; r++){
-            y[r] = analogRead(V2);
-            v[r] = analogRead(I2);
-          }
-        sync3();
-        for(unsigned int r=0; r<resolution; r++){
-            z[r] = analogRead(V3);
-            w[r] = analogRead(I3);
-          }
-      break;
-
-      case 12:            //f1->c1, f2->c2, f3->c3, c4=generador ligado a f1
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);
-            u[r] = analogRead(I1);
-          }
-        sync2();
-        for(unsigned int r=0; r<resolution; r++){
-            y[r] = analogRead(V2);
-            v[r] = analogRead(I2);
-          }
-        sync3();
-        for(unsigned int r=0; r<resolution; r++){
-            z[r] = analogRead(V3);
-            w[r] = analogRead(I3);
-          }
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            xx[r] = analogRead(V1);
-            t[r] = analogRead(I4);
-          }
-      break;
-      case 13:             //f1->c1, f2->c2, f3->c3, c4=generador ligado a f2
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);
-            u[r] = analogRead(I1);
-          }
-        sync2();
-        for(unsigned int r=0; r<resolution; r++){
-            y[r] = analogRead(V2);
-            v[r] = analogRead(I2);
-          }
-        sync3();
-        for(unsigned int r=0; r<resolution; r++){
-            z[r] = analogRead(V3);
-            w[r] = analogRead(I3);
-          }
-        sync2();
-        for(unsigned int r=0; r<resolution; r++){
-            yy[r] = analogRead(V2);
-            t[r] = analogRead(I4);
-          }
-      break;
-      case 14:             //f1->c1, f2->c2, f3->c3, c4=generador ligado a f3
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);
-            u[r] = analogRead(I1);
-          }
-        sync2();
-        for(unsigned int r=0; r<resolution; r++){
-            y[r] = analogRead(V2);
-            v[r] = analogRead(I2);
-          }
-        sync3();
-        for(unsigned int r=0; r<resolution; r++){
-            z[r] = analogRead(V3);
-            w[r] = analogRead(I3);
-          }
-        sync3();
-        for(unsigned int r=0; r<resolution; r++){
-            zz[r] = analogRead(V3);
-            t[r] = analogRead(I4);
-          }
-      break;
-       case 15:             //f1->c1, f2->c2, f3->c3,     c4 a f1, c5 a f2
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1); //Serial.print(u[r]);  Serial.print(" "); 
-            u[r] = analogRead(I1);
-          }
-          
-          ///////
-          //Serial.print(" L1:   "); 
-          for(unsigned int r=0; r<resolution; r++){
-          //Serial.print(x[r]);  Serial.print(","); 
-          }
-          //Serial.println(" "); 
-          //-------
-          
-           //Serial.print(" I1:   "); 
-          for(unsigned int r=0; r<resolution; r++){
-          // Serial.print(u[r]);  Serial.print(","); 
-          }
-         // Serial.println(" "); 
-          ///////
-          
-          
-        sync2();
-        for(unsigned int r=0; r<resolution; r++){
-            y[r] = analogRead(V2);
-            v[r] = analogRead(I2);
-          }
-          
-          ///////
-          //Serial.print(" L2:   "); 
-          //for(unsigned int r=0; r<resolution; r++){
-          // Serial.print(y[r]);  Serial.print(","); 
-         // }
-         // Serial.println(" "); 
-          
-           //-------
-          
-          //Serial.print(" I2:   "); 
-          for(unsigned int r=0; r<resolution; r++){
-          // Serial.print(v[r]);  Serial.print(","); 
-          }
-          //Serial.println(" "); 
-          ///////
-        sync3();
-        for(unsigned int r=0; r<resolution; r++){
-            z[r] = analogRead(V3);
-            w[r] = analogRead(I3);
-          }
-          ///////
-        //  Serial.print(" L3:   "); 
-        //  for(unsigned int r=0; r<resolution; r++){
-      //     Serial.print(z[r]);  Serial.print(","); 
-      //    }
-      //    Serial.println(" "); 
-          
-           ///////
-          
-         
-        sync4();
-        for(unsigned int r=0; r<resolution; r++){
-            xx[r] = analogRead(V1);
-            t[r] = analogRead(I4);
-          }
-         sync5();
-        for(unsigned int r=0; r<resolution; r++){
-            yy[r] = analogRead(V2);
-            s[r] = analogRead(I5);
-          }
-      break;
-       case 16:             //f1->c1, f2->c2, f3->c3,       c4 a f1, c5 a f3
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);
-            u[r] = analogRead(I1);
-          }
-        sync2();
-        for(unsigned int r=0; r<resolution; r++){
-            y[r] = analogRead(V2);
-            v[r] = analogRead(I3);
-          }
-        sync3();
-        for(unsigned int r=0; r<resolution; r++){
-            z[r] = analogRead(V3);
-            w[r] = analogRead(I3);
-          }
-        sync4();
-        for(unsigned int r=0; r<resolution; r++){
-            xx[r] = analogRead(V1);
-            t[r] = analogRead(I4);
-          }
-          sync6();
-        for(unsigned int r=0; r<resolution; r++){
-            zz[r] = analogRead(V3);
-            s[r] = analogRead(I5);
-          }
-      break;
-       case 17:             //f1->c1, f2->c2, f3->c3,           c4 a f2, c5 a f3
-        sync1();
-        for(unsigned int r=0; r<resolution; r++){
-            x[r] = analogRead(V1);
-            u[r] = analogRead(I1);
-          }
-        sync2();
-        for(unsigned int r=0; r<resolution; r++){
-            y[r] = analogRead(V2);
-            v[r] = analogRead(I2);
-          }
-        sync3();
-        for(unsigned int r=0; r<resolution; r++){
-            z[r] = analogRead(V3);
-            w[r] = analogRead(I3);
-          }
-        sync5();
-        for(unsigned int r=0; r<resolution; r++){
-            yy[r] = analogRead(V2);
-            t[r] = analogRead(I4);
-          }
-           sync6();
-        for(unsigned int r=0; r<resolution; r++){
-            zz[r] = analogRead(V3);
-            s[r] = analogRead(I5);
-          }
-      break;
-
-    }//end switch
-}//end readcycle
-
-void addup(){
-    Vrmsprom1=Vrmsprom1+Vrms1;             //cada paso por loop haz otra medicion y sumala a la anterior, al final cuando se termine el timer para pubnub se divide entre el total de medicones
-    Irmsprom1=Irmsprom1+I1a;
-    Powerprom1=Powerprom1+Power1;
-                Imax1prom=Imax1prom+imax1;
-                Imin1prom=Imin1prom+imin1;
-    if(pf1!=0){pfactorprom1=pfactorprom1+pf1;  pf1add++;   }
-
-    Vrmsprom2=Vrmsprom2+Vrms2;             //cada paso por loop haz otra medicion y sumala a la anterior, al final cuando se termine el timer para pubnub se divide entre el total de medicones
-    Irmsprom2=Irmsprom2+I2a;
-    Powerprom2=Powerprom2+Power2;
-                Imax2prom=Imax2prom+imax2;
-                Imin2prom=Imin2prom+imin2;
-    if(pf2!=0){pfactorprom2=pfactorprom2+pf2;  pf2add++;   }
-
-    Vrmsprom3=Vrmsprom3+Vrms3;             //cada paso por loop haz otra medicion y sumala a la anterior, al final cuando se termine el timer para pubnub se divide entre el total de medicones
-    Irmsprom3=Irmsprom3+I3a;
-    Powerprom3=Powerprom3+Power3;
-                Imax3prom=Imax3prom+imax3;
-                Imin3prom=Imin3prom+imin3;
-     if(pf3!=0){pfactorprom3=pfactorprom3+pf3;  pf3add++;   }
-
-    if(config == 12 || config == 13 || config == 14){
-      Irmsprom4=Irmsprom4+I4a;
-      Powerprom4=Powerprom4+Power4;
-      //pfactorprom4=pfactorprom4+pfactor4;
-    }
-     if(config == 15 || config == 16 || config == 17){
-      Irmsprom4=Irmsprom4+I4a;
-      Powerprom4=Powerprom4+Power4;
-                Imax4prom=Imax4prom+imax4;
-                Imin4prom=Imin4prom+imin4;
-       if(pf4!=0){pfactorprom4=pfactorprom4+pf4;  pf4add++;   }
-      
-      Irmsprom5=Irmsprom5+I5a;
-      Powerprom5=Powerprom5+Power5;
-                Imax5prom=Imax5prom+imax5;
-                Imin5prom=Imin5prom+imin5;
-       if(pf5!=0){pfactorprom5=pfactorprom5+pf5;  pf5add++;   }
-    }
-    p++;
-
-}  //end addup             //realiza varias lecturas por segundo y suma los resultados para ser promediados despues
-
-void gather(){
-    
-    readcycle();                        
-    maxmin(); 
-    area();
-    powerfactor();
-    addup();
-}
-
-
-void Task2code( void * pvParameters ){
-  Serial.print("Task2 running on core ");
-  Serial.println(xPortGetCoreID());
-  delay(3000);
-  Serial.println("Configuring WDT core 1...");
-  //esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
-  //esp_task_wdt_add(NULL); //add current thread to WDT watch
-  //esp_task_wdt_reset();
-  for(;;){
-    Serial.println("----------core 1-----------");
-    vbatcheck();
-    zeit=millis();                  //timer para guardar dato o publicar
-   
-
-  //xoc
-    gather();                      //realiza aprox 94 mediciones de voltaje y corriente, procesa y calcula v, i, pf de cada fase
-    power();                        //procesa y filtra el array para obtener Voltaje, Corriente, Potencia y factor de potencia
-    addup();                        //realiza y suma tantas mediciones como pueda durante el intervalo entre cada periodo de registro
-    empaquetador();                 //promedia las mediciones de cada intervalo y publica si cumple los criterios
-    buttoncheck();
-   //end xoc
+  else
+  {
+    digitalWrite(ledgreen, LOW);
+    digitalWrite(ledred, HIGH);
+    flag_online = 0;
+    Serial.println("could not sendData, marked as unsent");
+    // counterstatus--;
+    // onlinecheck3();
   }
-}
 
+} // end senddata
 void looppublisher()
 {
-  for (int i = BACKUPSIZE; i > 0; i--)
+  for (int i = BACKUPSIZE; i >= 0; i--)
   {
-    if (payloadbag[i][5] == 1)
+    if (payloadbag[i][0] == 1)//si hay un dato guardado
     {
-      Serial.print("sending nr:"); Serial.println(i);
-      payloadbag[i][5] = 0;
-      long currentTimebkp = currenttimearray[i];
-      float flowtempbkp = payloadbag[i][0];
-      flowtotal = payloadbag[i][1];
-      float flowacumbkp = payloadbag[i][2];
-      float vbatbkp = payloadbag[i][3];
-      float counterstatusbkp = payloadbag[i][4];
+      payloadbag[i][0] = 0;
+      unsigned long p_currenttime = currenttimearray[i];
+      //OJO: payloadbag[i][1] no se esta usando
+      float p_counterstatus = payloadbag[i][2];
+      float p_V1 = payloadbag[i][3];
+      float p_V2 = payloadbag[i][4];
+      float p_V3 = payloadbag[i][5];
 
+      float p_Ix0 = payloadbag[i][6];//confirmar si empiueza en cero o en uno
+      float p_Ix1 = payloadbag[i][7];
+      float p_Ix2 = payloadbag[i][8];
+      float p_Ix3 = payloadbag[i][9];
+      float p_Ix4 = payloadbag[i][10];
+      float p_Ix5 = payloadbag[i][11];
+      float p_Ix6 = payloadbag[i][12];
+      float p_Ix7 = payloadbag[i][13];
+      float p_Ix8 = payloadbag[i][14];
+      float p_Ix9 = payloadbag[i][15];
+      float p_Ix10 = payloadbag[i][16];
+      float p_Ix11 = payloadbag[i][17];
+
+      float p_Whx0 = payloadbag[i][18];//confirmar si empiueza en cero o en uno
+      float p_Whx1 = payloadbag[i][19];
+      float p_Whx2 = payloadbag[i][20];
+      float p_Whx3 = payloadbag[i][21];
+      float p_Whx4 = payloadbag[i][22];
+      float p_Whx5 = payloadbag[i][23];
+      float p_Whx6 = payloadbag[i][24];
+      float p_Whx7 = payloadbag[i][25];
+      float p_Whx8 = payloadbag[i][26];
+      float p_Whx9 = payloadbag[i][27];
+      float p_Whx10 = payloadbag[i][28];
+      float p_Whx11 = payloadbag[i][29];
+
+      float p_maxamps0 = payloadbag[i][30];//confirmar si empiueza en cero o en uno
+      float p_maxamps1 = payloadbag[i][31];
+      float p_maxamps2 = payloadbag[i][32];
+      float p_maxamps3 = payloadbag[i][33];
+      float p_maxamps4 = payloadbag[i][34];
+      float p_maxamps5 = payloadbag[i][35];
+      float p_maxamps6 = payloadbag[i][36];
+      float p_maxamps7 = payloadbag[i][37];
+      float p_maxamps8 = payloadbag[i][38];
+      float p_maxamps9 = payloadbag[i][39];
+      float p_maxamps10 = payloadbag[i][40];
+      float p_maxamps11 = payloadbag[i][41];
+
+      float p_pfx0 = payloadbag[i][42];//confirmar si empiueza en cero o en uno
+      float p_pfx1 = payloadbag[i][43];
+      float p_pfx2 = payloadbag[i][44];
+      float p_pfx3 = payloadbag[i][45];
+      float p_pfx4 = payloadbag[i][46];
+      float p_pfx5 = payloadbag[i][47];
+      float p_pfx6 = payloadbag[i][48];
+      float p_pfx7 = payloadbag[i][49];
+      float p_pfx8 = payloadbag[i][50];
+      float p_pfx9 = payloadbag[i][51];
+      float p_pfx10 = payloadbag[i][52];
+      float p_pfx11 = payloadbag[i][53];
+      
+
+
+      send_universal_log("Timestamp_Device=" + String(p_currenttime)+ "&config_id=" + String(caso) + "&XOC_id=" + String(XOCid,3)  + "&counterstatus=" + String(p_counterstatus) );// + "&count=" + String(0)); //count todavia no esta soportado, no se si se necesita
+      
+      //old sendData("Timestamp_Device=" + String(currentTimebkp) + "&config_id=" + String(caso) + "&flow=" + String(hotflowbkp) + "&tempIN=" + String(hottempbkpIN)+ "&tempOUT=" + String(hottempbkpOUT) + "&vbat=" + String(solarbatbkp)+ "&count=" + String(solarcountbkp));// + "&count=" + String(0)); //count todavia no esta soportado, no se si se necesita
+      
+      //version para sheets xoc1xx corriendo en vscode xoc002clone
+      //sendData("Timestamp_Device=" + String(p_currenttime)+ "&config_id=" + String(caso) + "&XOC_id=" + String(XOCid,3)  + "&counterstatus=" + String(p_counterstatus) + "&V1=" + String(p_V1)+ "&V2=" + String(p_V2) + "&V3=" + String(p_V3)+ "&I1=" + String(p_Ix0)+ "&I2=" + String(p_Ix1)  + "&I3=" + String(p_Ix2)+ "&I4=" + String(p_Ix3) + "&I5=" + String(p_Ix4)+ "&I6=" + String(p_Ix5)+ "&I7=" + String(p_Ix6)+ "&I8=" + String(p_Ix7)+ "&I9=" + String(p_Ix8)+ "&I10=" + String(p_Ix9)+ "&I11=" + String(p_Ix10)+ "&I12=" + String(p_Ix11)+ "&Wh1=" + String(p_Whx0)+ "&Wh2=" + String(p_Whx1) + "&Wh3=" + String(p_Whx2)+ "&Wh4=" + String(p_Whx3)+ "&Wh5=" + String(p_Whx4)+ "&Wh6=" + String(p_Whx5)+ "&Wh7=" + String(p_Whx6)+ "&Wh8=" + String(p_Whx7)+ "&Wh9=" + String(p_Whx8)+ "&Wh10=" + String(p_Whx9)+ "&Wh11=" + String(p_Whx10)+ "&Wh12=" + String(p_Whx11)+ "&pf1=" + String(p_pfx0)+ "&pf2=" + String(p_pfx1)+ "&pf3=" + String(p_pfx2)+ "&pf4=" + String(p_pfx3)+ "&pf5=" + String(p_pfx4)+ "&pf6=" + String(p_pfx5)+ "&pf7=" + String(p_pfx6)+ "&pf8=" + String(p_pfx7)+ "&pf9=" + String(p_pfx8)+ "&pf10=" + String(p_pfx9)+ "&pf11=" + String(p_pfx10)+ "&pf12=" + String(p_pfx11) );// + "&count=" + String(0)); //count todavia no esta soportado, no se si se necesita
+      
+
+
+      //version xoc2xx corriendo en vscode xoc003 ahora con payload extendida para incluir maxpot1-12 para mostrar potencia pico
+      //sendData("Timestamp_Device=" + String(p_currenttime)+ "&config_id=" + String(caso) + "&XOC_id=" + String(XOCid,3)  + "&counterstatus=" + String(p_counterstatus) + "&V1=" + String(p_V1)+ "&V2=" + String(p_V2) + "&V3=" + String(p_V3)+ "&I1=" + String(p_Ix0)+ "&I2=" + String(p_Ix1)  + "&I3=" + String(p_Ix2)+ "&I4=" + String(p_Ix3) + "&I5=" + String(p_Ix4)+ "&I6=" + String(p_Ix5)+ "&I7=" + String(p_Ix6)+ "&I8=" + String(p_Ix7)+ "&I9=" + String(p_Ix8)+ "&I10=" + String(p_Ix9)+ "&I11=" + String(p_Ix10)+ "&I12=" + String(p_Ix11)+ "&Wh1=" + String(p_Whx0)+ "&Wh2=" + String(p_Whx1) + "&Wh3=" + String(p_Whx2)+ "&Wh4=" + String(p_Whx3)+ "&Wh5=" + String(p_Whx4)+ "&Wh6=" + String(p_Whx5)+ "&Wh7=" + String(p_Whx6)+ "&Wh8=" + String(p_Whx7)+ "&Wh9=" + String(p_Whx8)+ "&Wh10=" + String(p_Whx9)+ "&Wh11=" + String(p_Whx10)+ "&Wh12=" + String(p_Whx11)    + "&maxamps1=" + String(p_maxamps0)+ "&maxamps2=" + String(p_maxamps1)+"&maxamps3=" + String(p_maxamps2)+"&maxamps4=" + String(p_maxamps3)+"&maxamps5=" + String(p_maxamps4)+"&maxamps6=" + String(p_maxamps5)+"&maxamps7=" + String(p_maxamps6)+"&maxamps8=" + String(p_maxamps7)+"&maxamps9=" + String(p_maxamps8)+"&maxamps10=" + String(p_maxamps9)+"&maxamps11=" + String(p_maxamps10)+"&maxamps12=" + String(p_maxamps11)+   "&pf1=" + String(p_pfx0)+ "&pf2=" + String(p_pfx1)+ "&pf3=" + String(p_pfx2)+ "&pf4=" + String(p_pfx3)+ "&pf5=" + String(p_pfx4)+ "&pf6=" + String(p_pfx5)+ "&pf7=" + String(p_pfx6)+ "&pf8=" + String(p_pfx7)+ "&pf9=" + String(p_pfx8)+ "&pf10=" + String(p_pfx9)+ "&pf11=" + String(p_pfx10)+ "&pf12=" + String(p_pfx11) );// + "&count=" + String(0)); //count todavia no esta soportado, no se si se necesita
+      //******* */
+      //p_Ix4=flag_error; //temp. COMENTADA POR RECOMENDACIÓN DE IA. 
+
+       sendData("Timestamp_Device=" + String(p_currenttime)+ "&config_id=" + String(caso) + "&XOC_id=" + String(XOCid,3)  + "&counterstatus=" + String(p_counterstatus) + "&V1=" + String(p_V1)+ "&V2=" + String(p_V2) + "&V3=" + String(p_V3)+ "&I1=" + String(p_Ix0)+ "&I2=" + String(p_Ix1)  + "&I3=" + String(p_Ix2)+ "&I4=" + String(p_Ix3) + "&I5=" + String(p_Ix4)+ "&I6=" + String(p_Ix5)+ "&I7=" + String(p_Ix6)+ "&I8=" + String(p_Ix7)+ "&I9=" + String(p_Ix8)+ "&I10=" + String(p_Ix9)+ "&I11=" + String(p_Ix10)+ "&I12=" + String(p_Ix11)+ "&Wh1=" + String(p_Whx0)+ "&Wh2=" + String(p_Whx1) + "&Wh3=" + String(p_Whx2)+ "&Wh4=" + String(p_Whx3)+ "&Wh5=" + String(p_Whx4)+ "&Wh6=" + String(p_Whx5)+ "&Wh7=" + String(p_Whx6)+ "&Wh8=" + String(p_Whx7)+ "&Wh9=" + String(p_Whx8)+ "&Wh10=" + String(p_Whx9)+ "&Wh11=" + String(p_Whx10)+ "&Wh12=" + String(p_Whx11)    + "&maxamps1=" + String(p_maxamps0)+ "&maxamps2=" + String(p_maxamps1)+"&maxamps3=" + String(p_maxamps2)+"&maxamps4=" + String(p_maxamps3)+"&maxamps5=" + String(p_maxamps4)+"&maxamps6=" + String(p_maxamps5)+"&maxamps7=" + String(p_maxamps6)+"&maxamps8=" + String(p_maxamps7)+"&maxamps9=" + String(p_maxamps8)+"&maxamps10=" + String(p_maxamps9)+"&maxamps11=" + String(p_maxamps10)+"&maxamps12=" + String(p_maxamps11)+   "&pf1=" + String(p_pfx0)+ "&pf2=" + String(p_pfx1)+ "&pf3=" + String(p_pfx2)+ "&pf4=" + String(p_pfx3)+ "&pf5=" + String(p_pfx4)+ "&pf6=" + String(p_pfx5)+ "&pf7=" + String(p_pfx6)+ "&pf8=" + String(p_pfx7)+ "&pf9=" + String(p_pfx8)+ "&pf10=" + String(p_pfx9)+ "&pf11=" + String(p_pfx10)+ "&pf12=" + String(p_pfx11) );// + "&count=" + String(0)); //count todavia no esta soportado, no se si se necesita
        
-      float hotflowbkp = payloadbag[i][6];
-      float hottempbkpIN = payloadbag[i][7];
-      float hottempbkpOUT = payloadbag[i][8];
-      float solarbatbkp = payloadbag[i][9];
-      float nivo1bkp = payloadbag[i][10];
-      float nivo1tempbkp = payloadbag[i][11];
-      float nivo1batbkp = payloadbag[i][12];
-      float solarcountbkp = payloadbag[i][13];
-      float boilercountbkp = payloadbag[i][14];
-      float nivocountbkp = payloadbag[i][15];
-      
 
-      //very old sendData("Timestamp_Device=" + String(currentTimebkp) + "&device_id=" + String(M3TRid) + "&temp=" + String(flowtempbkp) + "&flowshort=" + String(flowtotal) + "&flowacum=" + String(flowacumbkp) + "&vbat=" + String(vbatbkp) + "&counterstatus=" + String(counterstatusbkp));
-      //less old   sendData("Timestamp_Device=" + String(currentTimebkp) + "&device_id=" + String(M3TRid) + "&temp=" + String(flowtempbkp) + "&flowshort=" + String(flowtotal) + "&flowacum=" + String(flowacumbkp) + "&vbat=" + String(vbatbkp) + "&counterstatus=" + String(counterstatusbkp) + "&hotflow=" + String(hotflowbkp)+ "&hottemp=" + String(hottempbkp)+ "&solarbat=" + String(solarbatbkp)+ "&nivo1=" + String(nivo1bkp) + "&nivo1temp=" + String(nivo1tempbkp)+ "&nivo1bat=" + String(nivo1batbkp)); 
-      
-      if(caso==0){    //datos de M3TR, no de los sensores extra
-        sendData("Timestamp_Device=" + String(currentTimebkp) + "&config_id=" + String(caso)+ "&device_id=" + String(M3TRid) + "&temp=" + String(flowtempbkp) + "&flowshort=" + String(flowtotal) + "&flowacum=" + String(flowacumbkp) + "&vbat=" + String(vbatbkp) + "&counterstatus=" + String(counterstatusbkp)); 
-        //sendData("Timestamp_Device=" + String(currentTimebkp) + "&device_id=" + String(M3TRid) + "&temp=" + String(flowtempbkp) + "&flowshort=" + String(flowtotal) + "&flowacum=" + String(flowacumbkp) + "&vbat=" + String(vbatbkp) + "&counterstatus=" + String(counterstatusbkp) + "&hotflow=" + String(hotflowbkp)+ "&hottemp=" + String(0)+ "&solarbat=" + String(solarbatbkp)+ "&nivo1=" + String(nivo1bkp) + "&nivo1temp=" + String(nivo1tempbkp)+ "&nivo1bat=" + String(nivo1batbkp)); 
-        //ejemplo:  https://script.google.com/macros/s/AKfycbz_pcCj8ovohrlNnCZdJ2IwtwzR-uG23ejIsSIlm56_a1PpTMLy/exec?Timestamp_Device=123&config_id=0&device_id=3312&temp=10&flowshort=1&flowacum=2&vbat=3&counterstatus=4  if(caso==1 || caso==2 || caso==3){    //datos de sensores extra via LoRa ("solar", or "boiler bkp" or "heater todo")
-        }
-      if(caso==1 ||caso==3){    //datos de sensores extra via LoRa (solar y heater)
-        sendData("Timestamp_Device=" + String(currentTimebkp) + "&config_id=" + String(caso) + "&flow=" + String(hotflowbkp) + "&tempIN=" + String(hottempbkpIN)+ "&tempOUT=" + String(hottempbkpOUT) + "&vbat=" + String(solarbatbkp)+ "&count=" + String(solarcountbkp));// + "&count=" + String(0)); //count todavia no esta soportado, no se si se necesita
-        //ejemplo https://script.google.com/macros/s/AKfycbz_pcCj8ovohrlNnCZdJ2IwtwzR-uG23ejIsSIlm56_a1PpTMLy/exec?Timestamp_Device=123&config_id=2&flow=3312&tempIN=10&tempOUT=1&vbat=5
-      }
-      if(caso==2){    //datos de sensores extra via LoRa (boiler)
-        sendData("Timestamp_Device=" + String(currentTimebkp) + "&config_id=" + String(caso) + "&flow=" + String(hotflowbkp) + "&tempIN=" + String(hottempbkpIN)+ "&tempOUT=" + String(hottempbkpOUT) + "&vbat=" + String(solarbatbkp)+ "&count=" + String(boilercountbkp));// + "&count=" + String(0)); //count todavia no esta soportado, no se si se necesita
-        //ejemplo https://script.google.com/macros/s/AKfycbz_pcCj8ovohrlNnCZdJ2IwtwzR-uG23ejIsSIlm56_a1PpTMLy/exec?Timestamp_Device=123&config_id=2&flow=3312&tempIN=10&tempOUT=1&vbat=5
-      }
-      if(caso==4){    //datos de sensores extra via LoRa (nivo)
-        sendData("Timestamp_Device=" + String(currentTimebkp) + "&config_id=" + String(caso)+ "&level=" + String(nivo1bkp) + "&tempIN=" + String(nivo1tempbkp) + "&vbat=" + String(nivo1batbkp)+ "&count=" + String(nivocountbkp));// + "&counterstatus=" + String(counterstatusbkp)); 
-      }
-      caso=0;
-      
-
-
-      if (flagonline == 1)
+      if (flag_online == 1)
       {
         o--;
-        if(o==0){i = 0;}//exit
+        if(o==0)
+        {
+          i = 0;
+          //WiFi.mode( WIFI_MODE_NULL );
+        }//exit
+
       }
       else
       {
-        payloadbag[i][5] = 1; //mark as unsent
+        payloadbag[i][0] = 1; //mark as unsent
       }
-      i = 0; //exit
     }
     else
     {
-       //Serial.print("nadaaaaaa maaaaas");
+     // WiFi.mode( WIFI_MODE_NULL );
+      //Serial.print("nadaaaaaa maaaaas");
     }
   }//end for
 }//end looppublisher
 
-void railcheck()
+void OTAcheck()
 {
-  digitalWrite(railEnable, HIGH); //LOW=ON
-  delay(20);
-  vbat=analogRead(lipocheck);
-  vbat=vbat*4/2100;           //from raw to volts, antes 2267
-  if (vbat > 3.6)
-  {
-    digitalWrite(railEnable, LOW); //LOW=ON
-  }
-}
-
-void OTAcheck(){
   ///////////////////////////////////////// ota //////////////////////////////////////////
-int x=M3TRver;
-Serial.println("OTA ___ M3TR ID: " + String(M3TR_unique_id)+" , version: "+  String(x));
+  int x = XOCver;
+  Serial.println(">>> OTA XOC ID: " + String(XOC_unique_id) + " , version: " + String(x));
 
-//String bin = "/firmware" + String(version + 1) + ".bin";
-String bin = "/firmware" + String(M3TR_unique_id) +"."+  String(x + 1) + ".bin"; //ejemplo: firmware4.9.bin
-Serial.print("Looking for version: ");
-Serial.println(String(x + 1) +"on firmware: "+ bin); 
+  // String bin = "/firmware" + String(version + 1) + ".bin";
+  String bin = "/xoc" + String(XOC_unique_id) + "." + String(x + 1) + ".bin"; // ejemplo: xoc1.102.bin
+  Serial.print("Looking for version: ");
+  Serial.println(String(x + 1) + "on firmware: " + bin);
 
-//OTA.update("/G0_firmware_v1.3.bin");
-OTA.update(bin);
+  OTA.update(bin);
 }
 
-void setup() /////////////////    SETUP    ///////////////////
-  {
-    //delay(200);
-    Serial.begin(115200);
-    //delay(300);
-    Serial.print("\n\n");
-    Serial.println("Bienvenido a M3TR! putas");
-    //delay(100);
-    //Serverx.begin();
-  
-    //atSerial.println("Texto");
-
-    EEPROM.begin(EEPROM_SIZE);
-
-    //delay(100);
-    Serial.println("-----------SETUP-----------");
-    pinMode(flowpin, INPUT_PULLUP);
-    pinMode(flowled, OUTPUT);
-    pinMode(railEnable, OUTPUT);
-    pinMode(enserialport, OUTPUT);
-    digitalWrite(railEnable, HIGH); //LOW=ON
-    digitalWrite(enserialport, LOW); //LOW=ON
-    atSerial.begin(9600, SERIAL_8N1, 17, 16);
-    delay(100);
-    atSerial.print("Bienvenido enviado por atSerial");
-    whiteIDlist();
-
-
-    pinMode(ledred, OUTPUT);
-    digitalWrite(ledred, LOW);
-    pinMode(ledgreen, OUTPUT);
-    digitalWrite(ledgreen, LOW);
-
-    pinMode(bot, INPUT_PULLUP);
-    pinMode(14, INPUT_PULLDOWN);//que es esto?
-
-    digitalWrite(ledred, LOW);
-    digitalWrite(ledgreen, HIGH);
-    delay(300);
-    digitalWrite(ledred, HIGH);
-    digitalWrite(ledgreen, LOW);
-    delay(300);
-
-
-
-    Serial.println("Configuring WDT core 0...");
-
-    /*
-  #define lipocheck 36  //GPIO36 analog pin para medir voltaje de bateria 
-#define flowpin 34   //digital pin para medir el sensor de flujo
-#define flowled 2
-#define ledgreen 32
-#define ledred 35
-#define bot 26
-*/
-
-    // xTaskCreatePinnedToCore(
-    //                   Task1code,   /* Task function. */
-    //                   "Task1",     /* name of task. */
-    //                   10000,       /* Stack size of task */
-    //                   NULL,        /* parameter of the task */
-    //                   1,           /* priority of the task */
-    //                   &Task1,      /* Task handle to keep track of created task */
-    //                   0);          /* pin task to core 0 */
-    // delay(500);
-
-    //create a task that will be executed in the Task2code() function, with priority 1 and executed on core 1
-    Serial.println("Configuring Task2Core...");
-    xTaskCreatePinnedToCore(
-        Task2code, /* Task function. */
-        "Task2",   /* name of task. */
-        10000,     /* Stack size of task */
-        NULL,      /* parameter of the task */
-        1,         /* priority of the task */
-        &Task2,    /* Task handle to keep track of created task */
-        1);        /* pin task to core 1 */
-    delay(500); 
-
-  delay(100);
-  //esp_task_wdt_reset();
-
-  //connectToWiFi(0);
-  Serial.println("");
-
-  //connectToAWS();
-  delay(50);
-
-  //initLora(); 
-  delay(50);
-
-  // Enable saved past credential by autoReconnect option,
-  // even once it is disconnected.
-  //Config.immediateStart = true;
-  /////Config.autoReconnect = true;
-  //Config.hostName = "M3TR";
-  /////Config.portalTimeout = 60000;
-  /////Config.apid = "M3TR " + String(M3TRid);
-  //Config.apip = 192.168.0.1;
-  /////Config.retainPortal = false;     //testito
-
-
-  
-  /////Portal.config(Config);
-///////---------
-  // // Load aux. page
-  // Timezone.load(AUX_TIMEZONE);
-  // // Retrieve the select element that holds the time zone code and
-  // // register the zone mnemonic in advance.
-  // AutoConnectSelect&  tz = Timezone["timezone"].as<AutoConnectSelect>();
-  // for (uint8_t n = 0; n < sizeof(TZ) / sizeof(Timezone_t); n++) {
-  //   tz.add(String(TZ[n].zone));
-  // }
-
-  // Portal.join({ Timezone });        // Register aux. page
-//////////------
-  // Behavior a root path of ESP8266WebServer.
-  /////Server.on("/", rootPage);
-  /////Server.on("/start", startPage);   // Set NTP server trigger handler
-
-  //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts
+void Task2code( void * pvParameters ){
+  delay(200);
+  Serial.print("Task2 running on core ");
+  Serial.println(xPortGetCoreID());
+  //Serial.println("Configuring WDT core 1...");
+  //esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
   //esp_task_wdt_add(NULL); //add current thread to WDT watch
-  
-
-  // Serial.println("wifi begin setup");
-  // //WiFi.begin();
-  /////WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  // for (int a = 30; a > 0; a--)
-  // {
-  //   digitalWrite(ledred, LOW);
-  //   digitalWrite(ledgreen, HIGH);
-  //   delay(100);
-  //   digitalWrite(ledred, LOW);
-  //   digitalWrite(ledgreen, LOW);
-  //   delay(100);
-  // }
   //esp_task_wdt_reset();
-
- ///// connectToWiFi(1);
-  //if (WiFi.status() != WL_CONNECTED){
-  //  autoconnect_stuff();
-  //}
-
-  
- ///// Serial.println("Configurando timeClient...");
-  /////timeClient.begin();
-  /////timeClient.setTimeOffset(0);
-  /////timeClient.update();
-  /////Serial.print(timeClient.getEpochTime());
-
-
-
-
-  
-
-//railcheck();
-    sensor.begin(); //ds18b20 temp sensor (pin gpio15)
-
-
-} //end setup
-
-void CheckForConnections()
-{
-  if (Serverx.hasClient())
+  for (;;)
   {
-    // If we are already connected to another computer, 
-    // then reject the new connection. Otherwise accept
-    // the connection. 
-    if (RemoteClient.connected())
+    Serial.print(",");
+    
+    // zeit=millis();                  //timer para guardar dato o publicar
+    // readcycle();    //
+    // analysis(); //cleanup, voltaje , corrientes, powerfactor
+    // addup();
+    // empaquetador(); // average, addtobasket temp descomentar
+    // delay(100);
+
+    // new:
+    zeit = millis(); // timer para guardar dato o publicar
+
+    for (byte i = 0; i < 12; i++)
     {
-      Serial.println("Connection rejected");
-      Serverx.available().stop();
+      flag_wdt=1;//wdt set
+      //                                                           Serial.println(" "); 
+      // Serial.print("                                                in:");
+      //Serial.print(i);
+
+
+      //                                                           Serial.println(" "); 
+      // Serial.print("                                                readcycle_new:");
+      readcycle_new(i);
+
+
+
+          //                                                       Serial.println(" "); 
+          // Serial.print("                                                anaysis_new:");
+      analysis_new(i); // cleanup, voltaje , corrientes, powerfactor
+      // //temp:
+      //         V=100;
+      //         I=1;
+      //         pfactor_new=0.9;
+
+      //                                                     Serial.println(" "); 
+      // Serial.print("                                                  addup_new:");
+      addup_new(i);
+      //Serial.print(" ");
+      delay(10);
+    }
+                                                              //Serial.println(" "); 
+    empaquetador(); // average, addtobasket
+    delay(100);
+  }
+}//end task2code
+
+void relaunchTask2()
+{
+  vTaskDelete(Task2);
+  delay(500);
+  Serial.println("Configuring Task2Core...");
+  xTaskCreatePinnedToCore(
+      Task2code, /* Task function. */
+      "Task2",   /* name of task. */
+      10000,     /* Stack size of task */
+      NULL,      /* parameter of the task */
+      1,         /* priority of the task */
+      &Task2,    /* Task handle to keep track of created task */
+      1);        /* pin task to core 1 */
+  delay(100);
+}
+
+void doevery()
+{
+  currentMillis = millis();
+  // wificheck
+  if (currentMillis - previousMillis_wificheck >= 10000 || currentMillis < previousMillis_wificheck)
+  {
+    wificheck();
+    previousMillis_wificheck = currentMillis;
+  }
+
+  // ping
+  if (currentMillis - previousMillis_ping >= 20000 || currentMillis < previousMillis_ping)
+  {
+    ping();
+    previousMillis_ping = currentMillis;
+  }
+
+  // updatecurrentTime
+  if (currentMillis - previousMillis_timerbkp >= 3600000) // cada hora=3600000
+  {
+    previousMillis_timerbkp = currentMillis;
+    updatecurrentTime();
+    preferences.begin("my-pref", false);
+    preferences.putULong("currentTime", currentTime);
+    preferences.end();
+    // flag_timebackup = 1;
+  }
+
+  // OTA , LoRasetup, resarttolerance
+  if (currentMillis - previousMillistimerOTA >= 60000 || currentMillis < previousMillistimerOTA)
+  {
+    previousMillistimerOTA = currentMillis;
+
+
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    OTAcheck();
+  }
+    //LoRaSetup(); //se hace el setup periodicamente para que en caso de que haya un fail de SPI en setup se pueda corregir.
+
+    // restarttolerance
+    // if (flag_online == 1)
+    // {
+    //   restarttolerance = 3600 * 24 * 1000 * 5; // every 5 days
+    // }
+    // else
+    // {
+    //   restarttolerance = restarttolerance / 2; // ve reduciendo el tiempo de espera hasta que se reinicie.
+    //   Serial.print("restarttolerance: ");
+    //   Serial.println(restarttolerance);
+    // }
+  }
+
+  // ESP.restart:
+  //if (currentMillis - previousMillisRestart >= restarttolerance || currentMillis < previousMillisRestart) // cada 24 hr reinicia
+  
+  if (currentMillis > restarttolerance) // cada 24 hr reinicia
+  {
+    // previousMillisRestart = currentMillis;
+    updatecurrentTime();
+    preferences.begin("my-pref", false);
+    preferences.putULong("currentTime", currentTime);
+    preferences.end();
+    Serial.println("");
+    Serial.print("RESTARTING NOW...");
+    Serial.flush();
+    ESP.restart(); //aguanta todavia no quiero reiniciarlo
+  }
+
+
+  currentMillis = millis();
+  // external wdt reset
+  
+  if (currentMillis - previousMillis_wdt >= 5000 || currentMillis < previousMillis_wdt)
+  {
+    // do stuff for wdt, check both cores
+    if (flag_wdt == 1)
+    {
+      //Serial.print("----------------WDT--------------------------------");
+      digitalWrite(WDT, HIGH);
+      delay(10);
+      digitalWrite(WDT, LOW);
+      flag_wdt = 0;
     }
     else
     {
-      Serial.println("Connection accepted");
-      RemoteClient = Serverx.available();
+      flag_relauchTask2++;
+      Serial.print("flag_relauchTask2:");Serial.println(flag_relauchTask2);
+      if(flag_relauchTask2>3)
+      {
+        relaunchTask2();
+        flag_relauchTask2=0;
+      }
     }
+    previousMillis_wdt = currentMillis;
   }
-}
 
+} // end doevery
+
+
+
+
+
+
+void setup() /////////////////    SETUP    ///////////////////
+{
+
+
+  delay(100);
+   //set pin modes 
+ pinMode(ADCCS1, OUTPUT);
+ pinMode(ADCCS2, OUTPUT);
+ pinMode(MOSI, OUTPUT);
+ pinMode(MISO, INPUT);
+ pinMode(SCK, OUTPUT);
+ pinMode(WDT, OUTPUT);
+ pinMode(ledred, OUTPUT);
+ pinMode(ledgreen, OUTPUT);
+ pinMode(bot, INPUT_PULLUP);
+ // disable device to start with
+ digitalWrite(ADCCS1, HIGH);
+ digitalWrite(ADCCS2, HIGH);
+ digitalWrite(MOSI, LOW);
+ digitalWrite(SCK, LOW);
+ digitalWrite(WDT, HIGH);
+ delay(50);
+ digitalWrite(WDT, LOW);
+ digitalWrite(ledred, HIGH);
+ digitalWrite(ledgreen, LOW);
+
+ Serial.begin(115200);
+ delay(20);
+ Serial.print("\n\n");
+ Serial.print(">>>>> Bienvenido a XOC32 ID.version: ");
+ Serial.println(XOCid,3);
+
+ Serial.println("-----------SETUP-----------");
+ /////pinMode(flowpin, INPUT_PULLUP);
+ /////digitalWrite(enserialport, LOW); //LOW=ON
+
+ //   //SPI
+ //   // configure PIN mode
+ //   //NOTA: SPI solo se usa para LoRa, los MCP3208 tambien usan SPI pero se esta bitbangeando entonces no usa librerias.
+ // //  pinMode(ADCCS1, OUTPUT);
+ //  // pinMode(ADCCS2, OUTPUT);
+ //   pinMode(CSLORA, OUTPUT);
+ //   //digitalWrite(ADCCS1, HIGH);
+ //   //digitalWrite(ADCCS2, HIGH);
+ //   digitalWrite(CSLORA, HIGH);
+ //   SPISettings settings(ADC_CLK, MSBFIRST, SPI_MODE0);
+ //   SPI.begin();
+ //   SPI.beginTransaction(settings);
+
+ // isocom hardware serial via RS485
+ atSerial.begin(9600, SERIAL_8N1, 17, 16);
+ delay(100);
+ atSerial.print("Bienvenido enviado por atSerial");
+
+ // para mensajes de LoRa
+ whiteID[0] = XOC_unique_id;
+
+ // stored preferences:
+ Serial.println("loading stored data from preferences...");
+ preferences.begin("my-pref", false);
+
+ currentTime = preferences.getULong("currentTime", 0);
+ Serial.print("currentTime: ");
+ Serial.println(currentTime);
+
+ ssid = preferences.getString("rec_ssid", WIFI_SSID);
+ Serial.print("rec_ssid: ");
+ Serial.println(ssid);
+
+ password = preferences.getString("rec_password", WIFI_PASSWORD);
+ Serial.print("rec_password: ");
+ Serial.println(password);
+
+ preferences.end();
+
+ // create a task that will be executed in the Task2code() function, with priority 1 and executed on core 1
+ Serial.println("Configuring Task2Core...");
+ xTaskCreatePinnedToCore(
+     Task2code, /* Task function. */
+     "Task2",   /* name of task. */
+     10000,     /* Stack size of task */
+     NULL,      /* parameter of the task */
+     1,         /* priority of the task */
+     &Task2,    /* Task handle to keep track of created task */
+     1);        /* pin task to core 1 */
+ delay(500);
+
+for (byte j = 0; j < 12; j++)
+ {
+   pf[j] = 0.0;
+ }
+
+  // connectToAWS();
+  delay(50);
+
+  // LoRaSetup();
+  delay(50);
+
+  //wifi stuff
+  // WiFiStationSetup2(ssid, password);
+  // if (WiFi.status() != WL_CONNECTED)
+  // {
+    WiFi.begin(WIFI_SSID_xoc, WIFI_PASSWORD2); // try one time factory wifi
+    delay(3000);
+  // }
+
+  connecttohardcodedwifis();
+  delay(100);
+  updatecurrentTime();
+  // wificheck();
+  if (WiFi.status() == WL_CONNECTED)
+  {
+   send_universal_log("Timestamp_Device=" + String(currentTime) + "&config_id=" + String(caso) + "&XOC_id=" + String(XOCid, 3) + "&counterstatus=" + String(0));
+
+  }
+} // end setup
 
 void loop()
 {
-  //Serial.print(".");
-  connectToWiFi(0);
-  if (flagonline == 1)
+  if (flag_online == 1)
   {
     looppublisher();
   }
+  doevery();
 
-  unsigned long timerbkp = millis();
-  if (timerbkp - previousMillistimerbkp >= 3600000) //cada hora
-  {
-      previousMillistimerbkp = timerbkp;
-      timebackup = 1;
-  }
-  //antes
-  // if (millis() > timer)
-  // {
-  //   timer = 2*3600000 + millis(); //cada 2 horas
-  //   timebackup = 1;
-  // }
+  buttoncheck();
 
+  // Serial.println("");
+  // Serial.print("!");
+  // zeit=millis();                  //timer para guardar dato o publicar
+  // readcycle();    //
+  // analysis(); //cleanup, voltaje , corrientes, powerfactor
+  // addup();
+  // empaquetador(); // average, addtobasket temp descomentar
+  //
 
-  unsigned long timerbkpOTA = millis();
-  if (timerbkpOTA - previousMillistimerOTA >= 180000) {
-      previousMillistimerOTA = timerbkpOTA;
-      OTAcheck();
-  }
-//antes
-  // if (millis() > timerOTA)
-  // {
-  //   timerOTA = 180000 + millis(); //cada 3 min
-  //   OTAcheck();
-  // }
-
-  checkserial();
-  sensors();  
-
+  //zeit = millis();
   delay(100);
-  Portal.handleClient();
- // CheckForConnections();
-} //end loop
+  Serial.print("'");
+}
+
+//2do:
 
 
+
+//concepto xocmon3 features:
+// lee desde dos mcp3208 onboard, con puerto para expansion de otros dos mcp3208
+//    mcp3208_1: 3 voltajes, 3 corrientes , vbat, vref = 8 inputs. mcp3208_2: 8 corrientes. mcp3208_3 y 4 8 corrientes.
+// usa rtc
+// usa sd card  https://randomnerdtutorials.com/esp32-microsd-card-arduino/
+// OTA
+// bateria backup para un par de horas de respaldo, despues apaga todo y se pone en hibernacion, solo revisa cada x seg si ya regreso la luz (falta ver casos especificos)
+// lora capable para sensores inalambricos
+// servidor web / osciloscopio via wifi o serial  https://randomnerdtutorials.com/esp32-web-server-microsd-card/
+// autoconnect o de preferencia un portal mas ligero y que sirva mejor
+// espnow para hablar con xocev y otros productos futuros
+
+
+//corrientes 
+// array "iconfig" para asignar nr de corrientes y asignacion a fase:
+// las corrientes con 0 no se asignan a ninguna fase (no se lee pf ni wh, solo i) 
+// iconfig se asigna al momento deprogramar y no cambia hasta que se reprograme el esp32 via ota o usb.
+
+//sensores inalambricos
+//solo pueden leer corriente, por lo tanto solo pueden reportar "i" y "Ah"
+
+
+
+
+//otras cosas or hacer comunicaicon con xocev via serial o espnow o wifi o lora (pero no es tan seguro)
 //millis overflow/rollover: https://arduino.stackexchange.com/questions/12587/how-can-i-handle-the-millis-rollover
 
-//problema1: publicar tarda mas de 8 segundos por mensaje...
 
 
-//esptool.py  --port /dev/cu.SLAB_USBtoUART erase_flash
+//falta: 
+//pasar todo a un core, por que talvez tas2 esta haciendo ruido
+//upload a sheet: OK
+//mejorar el calculo de iarea ya que si detecta jump>1000 le suma cero en vez de un valor mas realista
+//powerfactor
+//hacer que mande cero cuando no hay clamp: OK
+//  solucion: poner jumper para activar el burden resistor de 1k para todas las entradas sin usar o para clamos sin burden interno, quitar jumper cuando se usen clamps con burden interno como el SCT013
+//confirmar que lea bien voltaje y corrientes
+//ajustar sheet para procesar toda la data
+//configconfig
 
 
-//falta: watchdog
-//falta hacer backup de version estable
-//falta cuando el internet esta malo no hace bien los backups offline y no se recupera.
+/*
+update:
+ver por que a vveces se tarda entre media y una hora en mandar el siguiente dato, sera que algo tiene  zeit = millis();? probar pasarlo a loop
+revisar updatecurrenttime 
 
+falta vver por que a veces se queda en led rojo
+
+falta soldar el pin2 de WDT attiny a EN de esp32 y hacer codigo para eso
+falta revisar updatecurrenttime y arreglarlo
+falta revisar powerfactor_new
+falta probar con variabilidad=1
+falta soldar WDT pin y hacer codigo (y arreglar en eagle)
+falta probar modo offline, hay un bug por ahi
+
+a futuro:
+SD card
+RTC
+
+*/

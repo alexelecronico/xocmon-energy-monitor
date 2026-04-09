@@ -12,5 +12,9 @@
 			"path": "../ESP32 tests"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.associations": {
+			"random": "cpp"
+		}
+	}
 }
