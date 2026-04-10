@@ -2055,12 +2055,34 @@ void buttoncheck() //if pushbutton pressed for more than x times delay(millis), 
   }
 }//end buttoncheck
 
+//Se realiza un traductor para enviar a Google Sheets; debido al tipo de formato. Modificar loopushlisher tomaría mucho tiempo:
+String convertirParamsAJson(String params) {
+    String json = "{";
+    int start = 0;
+    while (start < params.length()) {
+        int eq = params.indexOf('=', start);
+        int amp = params.indexOf('&', start);
+        if (amp == -1) amp = params.length();
+
+        // Extraemos la "llave" (nombre de columna) y el "valor"
+        String key = params.substring(start, eq);
+        String val = params.substring(eq + 1, amp);
+
+        json += "\"" + key + "\":" + val; // Los números en JSON no llevan comillas
+
+        if (amp < params.length()) json += ",";
+        start = amp + 1;
+    }
+    json += "}";
+    return json;
+} //Aqui finaliza el traductor. 
+
 void send_universal_log(String params_univ)
 {
   Serial.println(" ");
-  Serial.print("send to universal Log...");
+  Serial.print("Enviando a Superbase...");
   HTTPClient http; //AQUI POR PRIMERA VEZ INTENTO MANDAR DATOS. 
-  String url = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID_UNIVERSAL + "/exec?" + params_univ; //QUIZA MODIFICAR ESTO BASE DE DATOS.
+  String server = "https://miqrnsiajbplihvicydr.supabase.co/rest/v1/mediciones";
 
   digitalWrite(ledgreen, LOW);
   digitalWrite(ledred, LOW);
@@ -2068,23 +2090,36 @@ void send_universal_log(String params_univ)
   delay(10);
   digitalWrite(WDT, LOW);
 
-  Serial.print(url); //Se refiere a la URL que ya definimos arriba. 
-  Serial.print(" Making a request");
+  Serial.print(server); //Se refiere a la URL que ya definimos arriba. 
+  Serial.print("Realizando una solicitud:");
   //http.begin(url, root_ca); // Specify the URL and certificate
-  http.begin(url); // Specify the URL and certificate
-  Serial.print(" http.get:");
+
+  http.begin(server); // Specify the URL and certificate
+
+  Serial.print(" http.server:");
   //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
   //hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer 
   //esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
-  httpCode = http.GET();
-  Serial.print (" DONE");
+
+  //Configurar las etiquetas del paquete:
+    http.addHeader("apikey", apiKey);
+    http.addHeader("Authorization", "Bearer " + String(apiKey));
+    http.addHeader("Content-Type", "application/json");
+
+  //Se realiza la traducción a JSON:
+  String jsonPayload = convertirParamsAJson(params_univ);
+
+  httpCode = http.POST(jsonPayload);
+  Serial.print ("HECHO");
+
   //esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
   //disableCore0WDT();
+  
+  Serial.print("Listo. Respuesta de Superbase: ");
+  Serial.println(httpCode);
   http.end();
-  Serial.print(" with reply: ");
-  Serial.print (httpCode);
 
-  if (httpCode == 302 || httpCode == 200 || httpCode == -11)
+  if (httpCode == 201 || httpCode == 200 || httpCode==302 || httpCode == -11)
   {
     digitalWrite(ledgreen, HIGH);
     digitalWrite(ledred, LOW);
@@ -2100,26 +2135,36 @@ void send_universal_log(String params_univ)
     // onlinecheck3();
     Serial.print("sendData sending again...");
     HTTPClient http; //AQUI VUELVE A INICIAR EL PROCESO PARA INTENTAR MANDAR DATOS. 
-    String url = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID_UNIVERSAL + "/exec?" + params_univ; //QUIZA MODIFICAR ESTO BASE DE DATOS. 
+    String server = "https://miqrnsiajbplihvicydr.supabase.co/rest/v1/mediciones"; //Talvez no se necesite. 
 
-    Serial.print(url);
-    Serial.print(" Making a request");
+    Serial.print(server);
+
+    Serial.print("Realizando una solicitud");
     //http.begin(url, root_ca); // Specify the URL and certificate
-    http.begin(url); // Specify the URL and certificate
-    Serial.print(" http.get:");
+
+    http.begin(server); // Specify the URL and certificate
+
+    Serial.print(" http.server:");
     // esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
     // hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer
     // esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
-    httpCode = http.GET();
+
+    //Credenciales:
+    http.addHeader("apikey", apiKey);
+    http.addHeader("Authorization", "Bearer " + String(apiKey));
+    http.addHeader("Content-Type", "application/json");
+
+    httpCode = http.POST(jsonPayload);
+
     Serial.print(" DONE");
     // esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
     // disableCore0WDT();
-    http.end();
-    Serial.print(" with reply: ");
+    Serial.print("Listo: Respuesta de superbase: ");
     Serial.println(httpCode);
+    http.end();
   }
 
-  if (httpCode == 302 || httpCode == 200 || httpCode == -11)
+  if (httpCode == 201 || httpCode == 200 || httpCode == 302 || httpCode == -11)
   {
     digitalWrite(ledgreen, HIGH);
     digitalWrite(ledred, LOW);
@@ -2136,11 +2181,12 @@ void send_universal_log(String params_univ)
 
 }//end send_universal_log
 
+
 void sendData(String params)
 {
   Serial.println("sendData sending...");
   HTTPClient http;
-  String url = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID + "/exec?" + params; //QUIZA MODIFICAR ESTO BASE DE DATOS. 
+  String server = "https://miqrnsiajbplihvicydr.supabase.co/rest/v1/mediciones"; 
 
   digitalWrite(ledgreen, LOW);
   digitalWrite(ledred, LOW);
@@ -2148,21 +2194,32 @@ void sendData(String params)
   delay(10);
   digitalWrite(WDT, LOW);
 
-  Serial.print(url);
-  Serial.print("Making a request");
+  Serial.print(server);
+  Serial.print("Realizando una solicitud:");
   //http.begin(url, root_ca); // Specify the URL and certificate
-  http.begin(url); // Specify the URL and certificate
-  Serial.print("http.get:");
+
+  http.begin(server); // Specify the URL and certificate
+
+  //Credenciales para la base de datos. 
+    http.addHeader("apikey", apiKey);
+    http.addHeader("Authorization", "Bearer " + String(apiKey));
+    http.addHeader("Content-Type", "application/json");
+
+String jsonPayload = convertirParamsAJson(params);
+
+  Serial.print("http.server:");
   //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
   //hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer 
-  //esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
-  httpCode = http.GET();
+  //esp_task_wdt_init(10, true); //enable panic so ESP32 restarts}
+
+  httpCode = http.POST(jsonPayload);
+
   Serial.print (" DONE");
   //esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
   //disableCore0WDT();
-  http.end();
-  Serial.print(" with reply: ");
+  Serial.print("Hecho. Respuesta de superbase: ");
   Serial.println (httpCode);
+  http.end();
 
   // if (httpCode == 302 || httpCode == 200)
   // {
@@ -2184,7 +2241,7 @@ void sendData(String params)
   // http.end();
   // }
 
-  if (httpCode == 302 || httpCode == 200 || httpCode == -11)
+  if (httpCode == 201 || httpCode == 200 || httpCode==302 || httpCode == -11)
   {
     digitalWrite(ledgreen, HIGH);
     digitalWrite(ledred, LOW);
@@ -2197,28 +2254,33 @@ void sendData(String params)
     // flag_online=0;
     // counterstatus--;
     // onlinecheck3();
-    Serial.println("sendData sending again...");
+    Serial.println("Tratando de enviar de nuevo...");
     HTTPClient http; //Vuelve a intentar a enviar la información. 
-    String url = "https://script.google.com/macros/s/" + GOOGLE_SCRIPT_ID + "/exec?" + params; //QUIZA MODIFICAR ESTO BASE DE DATOS. 
 
-    Serial.print(url);
-    Serial.print("Making a request");
+    Serial.print(server);
+    Serial.print("Realizando una solicitud:");
     //http.begin(url, root_ca); // Specify the URL and certificate
-    http.begin(url); // Specify the URL and certificate
-    Serial.print("http.get:");
+
+    http.begin(server); // Specify the URL and certificate
+
+    http.addHeader("apikey", apiKey);
+    http.addHeader("Authorization", "Bearer " + String(apiKey));
+    http.addHeader("Content-Type", "application/json");
+    
+    Serial.print("http.server:");
     // esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
     // hacer un timer manual, si pasan mas de unos 20 seg haz backup de currenttimer
     // esp_task_wdt_init(10, true); //enable panic so ESP32 restarts
-    httpCode = http.GET();
-    Serial.print(" DONE");
+    httpCode = http.POST(jsonPayload);
+    Serial.print("HECHO");
     // esp_task_wdt_init(3, true); //enable panic so ESP32 restarts
     // disableCore0WDT();
-    http.end();
-    Serial.print(" with reply: ");
+    Serial.print("Hecho. Respuesta de superbase: ");
     Serial.println(httpCode);
+    http.end();
   }
 
-  if (httpCode == 302 || httpCode == 200 || httpCode == -11)
+  if (httpCode == 201 || httpCode == 200 || httpCode==302 || httpCode == -11)
   {
     digitalWrite(ledgreen, HIGH);
     digitalWrite(ledred, LOW);

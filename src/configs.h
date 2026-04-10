@@ -4,7 +4,9 @@
 //google publish
  #include <HTTPClient.h>
 
-String GOOGLE_SCRIPT_ID_UNIVERSAL = "AKfycbyRh8JmdSkUlhHSSYDKoXamBKhEeWvocPHMupTTCJVWwcHPRCq1NQMNJzI1ldZPcV7P";   //xocUniversalLog
+//String GOOGLE_SCRIPT_ID_UNIVERSAL = "AKfycbyRh8JmdSkUlhHSSYDKoXamBKhEeWvocPHMupTTCJVWwcHPRCq1NQMNJzI1ldZPcV7P";   //xocUniversalLog
+const char* apiKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1pcXJuc2lhamJwbGlodmljeWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NjcxODgsImV4cCI6MjA5MDA0MzE4OH0.SosLYe4qJGJ9NkO3asxpkY994HIYkqZYH-lMZS7xj0g";
+
 
 //String GOOGLE_SCRIPT_ID = "AKfycbyPJOnFbw_qaIzhWTE9x-DocHO9zI_DgcSvat8mV7jQEvugwGrpPGuYPI7whYydoEaxLw";   //xoc100         ofi martin
 //String GOOGLE_SCRIPT_ID = "AKfycbwXHoXiMxsIuWkYiYqx0_Ojf5tWEI3ADdIIIoOEWHv4J2qBxxk44VFTbGYoIltG7eMTSg";   //xoc100.2       ofi martin
@@ -14,7 +16,7 @@ String GOOGLE_SCRIPT_ID_UNIVERSAL = "AKfycbyRh8JmdSkUlhHSSYDKoXamBKhEeWvocPHMupT
 //String GOOGLE_SCRIPT_ID = "AKfycby_S8heoGftmAkB2zkqIB8lV7z3Vhx9onEpBzakPphD_tDd0aP-ge_47zNTbsalU-3QCw";   //xoc111.2       casa rafa
 //String GOOGLE_SCRIPT_ID = "AKfycbyi3zE-9paV9szCT9rrZtTLJalmb1eJileY8W6x5u2_sAbheyZyZYp3FClF7RoOUTmV";       //xoc112.3       XOC lab martin casa 42
 //String GOOGLE_SCRIPT_ID = "AKfycbwCmgJNQL4QljM-QiLYVgjslGDyO_xFn21dm5mxD0oX3g8dib1Ls1bkIATYr5ZvkZZvPw";  //120 Mondragón
-String GOOGLE_SCRIPT_ID = "AKfycbxjNaInfU0qQZXZETVB5phLk4nwPfVqQwHVLyBSh818LGwRnfxioHUB9_AA516A_cld"; //307 Cafe Mondragon
+//String GOOGLE_SCRIPT_ID = "AKfycbxjNaInfU0qQZXZETVB5phLk4nwPfVqQwHVLyBSh818LGwRnfxioHUB9_AA516A_cld"; //307 Cafe Mondragon
 //String GOOGLE_SCRIPT_ID = "AKfycbxRBE2Mmx87n9x1vo6U9zJ9XNiudrM7cAIfer8aCzkzDXtAJtsqDJ8nFw2CCP8nEb1u"; //XOC 308. Falta por asignar.   
 //String GOOGLE_SCRIPT_ID = "AKfycbwBMEqByPHIbSH_1rUYLl_unrL0XUao_0W9euQxywX-VWAhRLXQEwQcqK5LYLu9HkJN"; //XOC 309. Falta por asignar. Es la que tiene antena. 
 //String GOOGLE_SCRIPT_ID = "AKfycbzaAoIxhJj3c3gWWkOJq0qZAGklBZAFwMLfS3d3dpM8D6E-aWDQoukvTYWgRQ2YLCmq"; //Xoc 310. Falta por asignar. Es la que tiene antena. 
