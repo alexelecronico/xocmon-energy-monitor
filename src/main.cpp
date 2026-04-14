@@ -1027,171 +1027,42 @@ void average_new()  //cuando ya va a publicar saca el promedio dividiendo la sum
 
 ////////end adc/////
 
-void updatecurrentTime()
-{
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    // pregunta a internet
+//Nuevo void para el updatecurrentTime: 
 
-    // get internet time
-    Serial.println("updatecurrentTime...");
-    unsigned long internet_time;
+void updatecurrentTime() {
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("Configurando hora con NTP nativo...");
+    
+    // Configura el servidor (CST México es -6 o -21600 segundos)
+    configTime(-21600, 0, "pool.ntp.org", "time.nist.gov");
 
-    // try to get internet times x times
-    for (int i = 0; i < 10; i++)
-    {
-      Serial.print("attempt nr: ");
-      Serial.print(i);
-      timeClient.begin();
-      timeClient.setTimeOffset(0);
-      timeClient.update();
-      internet_time = timeClient.getEpochTime(); // get epoch from internet
-      Serial.print(" ,internet time: ");
-      Serial.println(internet_time);
-      timeClient.end();
-
-      if (internet_time > 1700000000)
-      {
-        i = 10; // exit
-      }
-    }
-
-    if (internet_time < 1700000000)
-    {
+    struct tm timeinfo;
+    if (!getLocalTime(&timeinfo)) {
+      Serial.println("Fallo al obtener la hora, usando guardada...");
       preferences.begin("my-pref", false);
       currentTime = preferences.getULong("currentTime", 0);
       preferences.end();
+    } else {
+      time_t now;
+      time(&now);
+      currentTime = (unsigned long)now;
+      Serial.print("Hora actualizada: "); Serial.println(currentTime);
+      
+      // Guardar en memoria para la próxima vez que no haya internet
+      preferences.begin("my-pref", false);
+      preferences.putULong("currentTime", currentTime);
+      preferences.end();
     }
-    else
-    {
-      currentTime = internet_time;
-    }
-  }
-  else
-  {
+  } else {
     preferences.begin("my-pref", false);
     currentTime = preferences.getULong("currentTime", 0);
     preferences.end();
   }
-  // Serial.print("pre currentTime is: ");Serial.println(currentTime);
-  // period = millis() - millispre + 500;
-  // Serial.print("period is: ");Serial.println(period);
-  // currentTime = currentTime + period/1000;
-  // millispre=millis();
-  // Serial.print("post currentTime is: ");Serial.println(currentTime);
+}
 
-  // if(internet_time < 1640000000)
-  // {
-  //   if(currentTime < 1640000000)
-  //   {
-  //     preferences.begin("my-pref", false);
-  //     //preferences.putULong("currentTime", internet_time);
-  //     //currentTime=internet_time;
-  //     long q = preferences.getULong("currentTime", 123);
-  //     Serial.print("last saved time is: ");Serial.println(q);
-  //     preferences.end();
-  //     currentTime=q;
-  //   }
-  // }
-  // else
-  // {
-  //   long k = abs(currentTime-internet_time);
+//end updatecurrentTime
 
-  //   Serial.print("drift is: ");Serial.println(k);
-  //   if(k>20)
-  //   {
-  //     preferences.begin("my-pref", false);
-  //     preferences.putULong("currentTime", internet_time);
-  //     currentTime=internet_time;
-  //     Serial.print("new saved currenttime is: ");
-  //     long q = preferences.getULong("currentTime", 123);
-  //     Serial.println(q);
-  //     preferences.end();
-  //   }
-  //   if (flagofflinedrift == 0)
-  //   {
-  //     offlinedrift = 0;
-  //   }
-  // }
-
-} // end updatecurrentTime
-
-void updatecurrentTime_old()
-{
-
-  //get internet time
-  Serial.println("updatecurrentTime...");
-  unsigned long internet_time;
-  timeClient.begin();
-  timeClient.setTimeOffset(0);
-  timeClient.update();
-  internet_time = timeClient.getEpochTime(); // get epoch from internet
-  Serial.print("internet time: ");
-  Serial.println(internet_time);
-  timeClient.end();
-
-  //get internet time again if unsuccessful
-  if (internet_time < 1660000000)
-  {
-    Serial.print("Reading internet time again: ");
-    timeClient.begin();
-    timeClient.setTimeOffset(0);
-    timeClient.update();
-    internet_time = timeClient.getEpochTime(); // get epoch from internet
-    Serial.print("internet time: ");
-    Serial.println(internet_time);
-    timeClient.end();
-    if (internet_time < 1660000000)
-    {
-      offlinedrift=internet_time;
-      Serial.print("offlinedrift: ");
-      Serial.println(offlinedrift);
-      flagofflinedrift=1;
-    }
-  }
-
-  Serial.print("pre currentTime is: ");Serial.println(currentTime);
-  period = millis() - millispre + 500;
-  Serial.print("period is: ");Serial.println(period);
-  currentTime = currentTime + period/1000;
-  millispre=millis();
-  Serial.print("post currentTime is: ");Serial.println(currentTime);
-
-  if(internet_time < 1640000000)
-  {
-    if(currentTime < 1640000000)
-    {
-      preferences.begin("my-pref", false); 
-      //preferences.putULong("currentTime", internet_time);
-      //currentTime=internet_time;
-      long q = preferences.getULong("currentTime", 123);
-      Serial.print("last saved time is: ");Serial.println(q);
-      preferences.end();
-      currentTime=q;
-    }
-  }
-  else
-  {
-    unsigned long k = (currentTime-internet_time);
-
-    Serial.print("drift is: ");Serial.println(k);
-    if(k>20)
-    {
-      preferences.begin("my-pref", false); 
-      preferences.putULong("currentTime", internet_time);
-      currentTime=internet_time;
-      Serial.print("new saved currenttime is: ");
-      long q = preferences.getULong("currentTime", 123);
-      Serial.println(q);
-      preferences.end();
-    }
-    if (flagofflinedrift == 0)
-    {
-      offlinedrift = 0;
-    }
-  }
-}//end updatecurrentTime
-
+//Aqui iba antes el void updatecurrentTime_old. Lo elimine porque no había mas referencias a este. 
 
 ///////////wifi/////////
 
@@ -2074,19 +1945,27 @@ String convertirParamsAJson(String params) {
         }
         // ------------------------------------
 
-        json += "\"" + key + "\":" + val; // Los números en JSON no llevan comillas
+// --- PARCHE PARA TEXTO (TIMESTAMP) ---
+        // Si el valor contiene un guion (como en la fecha), le ponemos comillas
+        if (val.indexOf('-') != -1 || key == "timestamp") {
+            json += "\"" + key + "\":\"" + val + "\""; 
+        } else {
+            json += "\"" + key + "\":" + val; 
+        }
 
         if (amp < params.length()) json += ",";
         start = amp + 1;
     }
     json += "}";
     return json;
-} //Aqui finaliza el traductor. 
+} 
+
+//Aqui finaliza el traductor. 
 
 void send_universal_log(String params_univ)
 {
   Serial.println(" ");
-  Serial.print("Enviando a Superbase...");
+  Serial.print("Enviando a Superbase UNIVERSAL LOG");
   HTTPClient http; //AQUI POR PRIMERA VEZ INTENTO MANDAR DATOS. 
   String server = "https://miqrnsiajbplihvicydr.supabase.co/rest/v1/Mediciones";
 
@@ -2098,9 +1977,9 @@ void send_universal_log(String params_univ)
 
   Serial.println(server); //Se refiere a la URL que ya definimos arriba. 
   Serial.print("Realizando una solicitud:");
-  //http.begin(url, root_ca); // Specify the URL and certificate
 
   http.begin(server); // Specify the URL and certificate
+  delay(20);
 
   Serial.print(" http.server:");
   //esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
@@ -2139,15 +2018,15 @@ void send_universal_log(String params_univ)
     // flag_online=0;
     // counterstatus--;
     // onlinecheck3();
-    Serial.print("sendData sending again...");
+    Serial.print("Tratando de enviar de nuevo UNIVERSAL LOG");
     HTTPClient http; //AQUI VUELVE A INICIAR EL PROCESO PARA INTENTAR MANDAR DATOS. 
     String server = "https://miqrnsiajbplihvicydr.supabase.co/rest/v1/Mediciones"; //Talvez no se necesite. 
 
     Serial.println(server);
     Serial.print("Realizando una solicitud");
-    //http.begin(url, root_ca); // Specify the URL and certificate
 
     http.begin(server); // Specify the URL and certificate
+    delay(20);
 
     Serial.print(" http.server:");
     // esp_task_wdt_init(20, true); //enable panic so ESP32 restarts}
@@ -2189,7 +2068,7 @@ void send_universal_log(String params_univ)
 
 void sendData(String params)
 {
-  Serial.println("sendData sending...");
+  Serial.println("Enviando a Superbase sendData ");
   HTTPClient http;
   String server = "https://miqrnsiajbplihvicydr.supabase.co/rest/v1/Mediciones"; 
 
@@ -2201,9 +2080,9 @@ void sendData(String params)
 
   Serial.println(server);
   Serial.print("Realizando una solicitud:");
-  //http.begin(url, root_ca); // Specify the URL and certificate
 
   http.begin(server); // Specify the URL and certificate
+  delay(20);
 
   //Credenciales para la base de datos. 
     http.addHeader("apikey", apiKey);
@@ -2267,14 +2146,14 @@ Serial.println(">>> ENVIANDO... <<<");
     // flag_online=0;
     // counterstatus--;
     // onlinecheck3();
-    Serial.println("Tratando de enviar de nuevo...");
+    Serial.println("Tratando de enviar de nuevo sendData");
     HTTPClient http; //Vuelve a intentar a enviar la información. 
 
     Serial.println(server);
-    Serial.print("Realizando una solicitud:");
-    //http.begin(url, root_ca); // Specify the URL and certificate
+    Serial.print("Realizando una solicitud");
 
     http.begin(server); // Specify the URL and certificate
+    delay(20);
 
     http.addHeader("apikey", apiKey);
     http.addHeader("Authorization", "Bearer " + String(apiKey));
@@ -2377,7 +2256,7 @@ void looppublisher()
       
 
 
-      //send_universal_log("XOCid=" + String(XOCid) + "&timestamp=" + String(p_currenttime)); // Comentado Ya que es redundante con el nuevo sendData
+      //send_universal_log("XOCid=" + String(XOCid) + "&timestamp=" + String(p_currenttime)); // Comentado Ya que es redundante. 
           
       //old sendData("Timestamp_Device=" + String(currentTimebkp) + "&config_id=" + String(caso) + "&flow=" + String(hotflowbkp) + "&tempIN=" + String(hottempbkpIN)+ "&tempOUT=" + String(hottempbkpOUT) + "&vbat=" + String(solarbatbkp)+ "&count=" + String(solarcountbkp));// + "&count=" + String(0)); //count todavia no esta soportado, no se si se necesita
       
@@ -2388,8 +2267,26 @@ void looppublisher()
       //sendData("Timestamp_Device=" + String(p_currenttime)+ "&config_id=" + String(caso) + "&XOC_id=" + String(XOCid,3)  + "&counterstatus=" + String(p_counterstatus) + "&V1=" + String(p_V1)+ "&V2=" + String(p_V2) + "&V3=" + String(p_V3)+ "&I1=" + String(p_Ix0)+ "&I2=" + String(p_Ix1)  + "&I3=" + String(p_Ix2)+ "&I4=" + String(p_Ix3) + "&I5=" + String(p_Ix4)+ "&I6=" + String(p_Ix5)+ "&I7=" + String(p_Ix6)+ "&I8=" + String(p_Ix7)+ "&I9=" + String(p_Ix8)+ "&I10=" + String(p_Ix9)+ "&I11=" + String(p_Ix10)+ "&I12=" + String(p_Ix11)+ "&Wh1=" + String(p_Whx0)+ "&Wh2=" + String(p_Whx1) + "&Wh3=" + String(p_Whx2)+ "&Wh4=" + String(p_Whx3)+ "&Wh5=" + String(p_Whx4)+ "&Wh6=" + String(p_Whx5)+ "&Wh7=" + String(p_Whx6)+ "&Wh8=" + String(p_Whx7)+ "&Wh9=" + String(p_Whx8)+ "&Wh10=" + String(p_Whx9)+ "&Wh11=" + String(p_Whx10)+ "&Wh12=" + String(p_Whx11)    + "&maxamps1=" + String(p_maxamps0)+ "&maxamps2=" + String(p_maxamps1)+"&maxamps3=" + String(p_maxamps2)+"&maxamps4=" + String(p_maxamps3)+"&maxamps5=" + String(p_maxamps4)+"&maxamps6=" + String(p_maxamps5)+"&maxamps7=" + String(p_maxamps6)+"&maxamps8=" + String(p_maxamps7)+"&maxamps9=" + String(p_maxamps8)+"&maxamps10=" + String(p_maxamps9)+"&maxamps11=" + String(p_maxamps10)+"&maxamps12=" + String(p_maxamps11)+   "&pf1=" + String(p_pfx0)+ "&pf2=" + String(p_pfx1)+ "&pf3=" + String(p_pfx2)+ "&pf4=" + String(p_pfx3)+ "&pf5=" + String(p_pfx4)+ "&pf6=" + String(p_pfx5)+ "&pf7=" + String(p_pfx6)+ "&pf8=" + String(p_pfx7)+ "&pf9=" + String(p_pfx8)+ "&pf10=" + String(p_pfx9)+ "&pf11=" + String(p_pfx10)+ "&pf12=" + String(p_pfx11) );// + "&count=" + String(0)); //count todavia no esta soportado, no se si se necesita
       
       //p_Ix4=flag_error; //temp. ESTA ERA LA CAUSANTE DEL ERROR I5. 
-       
-      sendData("XOCid=" + String(XOCid) + "&V1=" + String(p_V1) + "&V2=" + String(p_V2) + "&V3=" + String(p_V3) + "&I1=" + String(p_Ix0) + "&I2=" + String(p_Ix1) + "&I3=" + String(p_Ix2) + "&I4=" + String(p_Ix3) + "&I5=" + String(p_Ix4) + "&I6=" + String(p_Ix5) + "&I7=" + String(p_Ix6) + "&I8=" + String(p_Ix7) + "&I9=" + String(p_Ix8) + "&I10=" + String(p_Ix9) + "&I11=" + String(p_Ix10) + "&I12=" + String(p_Ix11) + "&Wh1=" + String(p_Whx0) + "&Wh2=" + String(p_Whx1) + "&Wh3=" + String(p_Whx2) + "&Wh4=" + String(p_Whx3) + "&Wh5=" + String(p_Whx4) + "&Wh6=" + String(p_Whx5) + "&Wh7=" + String(p_Whx6) + "&Wh8=" + String(p_Whx7) + "&Wh9=" + String(p_Whx8) + "&Wh10=" + String(p_Whx9) + "&Wh11=" + String(p_Whx10) + "&Wh12=" + String(p_Whx11) + "&MAXamp1=" + String(p_maxamps0) + "&MAXamp2=" + String(p_maxamps1) + "&MAXamp3=" + String(p_maxamps2) + "&MAXamp4=" + String(p_maxamps3) + "&MAXamp5=" + String(p_maxamps4) + "&MAXamp6=" + String(p_maxamps5) + "&MAXamp7=" + String(p_maxamps6) + "&MAXamp8=" + String(p_maxamps7) + "&MAXamp9=" + String(p_maxamps8) + "&MAXamp10=" + String(p_maxamps9) + "&MAXamp11=" + String(p_maxamps10) + "&MAXamp12=" + String(p_maxamps11) + "&pf1=" + String(p_pfx0) + "&pf2=" + String(p_pfx1) + "&pf3=" + String(p_pfx2) + "&pf4=" + String(p_pfx3) + "&pf5=" + String(p_pfx4) + "&pf6=" + String(p_pfx5) + "&pf7=" + String(p_pfx6) + "&pf8=" + String(p_pfx7) + "&pf9=" + String(p_pfx8) + "&pf10=" + String(p_pfx9) + "&pf11=" + String(p_pfx10) + "&pf12=" + String(p_pfx11));
+
+
+      //Lo siguiente es para convertir los segundos de 1970 a algo entendible:
+      struct tm timeinfo;
+      if(!getLocalTime(&timeinfo)){
+      Serial.println("Fallo al obtener tiempo local");
+    // Si falla, podrías poner una fecha por defecto para evitar el error 400
+    }
+
+     char fechaFormateada[20];
+     strftime(fechaFormateada, sizeof(fechaFormateada), "%Y-%m-%dT%H:%M:%S", &timeinfo);
+    
+    // Solo procedemos si el año es coherente (mayor a 2024)
+    if (timeinfo.tm_year + 1900 > 2024) {
+    Serial.println("Preparando envío con hora válida...");
+    sendData("XOCid=" + String(XOCid) + "&timestamp=" + String(fechaFormateada) + "&Counter=" + String(p_counterstatus, 1) +"&V1=" + String(p_V1) + "&V2=" + String(p_V2) + "&V3=" + String(p_V3) + "&I1=" + String(p_Ix0) + "&I2=" + String(p_Ix1) + "&I3=" + String(p_Ix2) + "&I4=" + String(p_Ix3) + "&I5=" + String(p_Ix4) + "&I6=" + String(p_Ix5) + "&I7=" + String(p_Ix6) + "&I8=" + String(p_Ix7) + "&I9=" + String(p_Ix8) + "&I10=" + String(p_Ix9) + "&I11=" + String(p_Ix10) + "&I12=" + String(p_Ix11) + "&Wh1=" + String(p_Whx0) + "&Wh2=" + String(p_Whx1) + "&Wh3=" + String(p_Whx2) + "&Wh4=" + String(p_Whx3) + "&Wh5=" + String(p_Whx4) + "&Wh6=" + String(p_Whx5) + "&Wh7=" + String(p_Whx6) + "&Wh8=" + String(p_Whx7) + "&Wh9=" + String(p_Whx8) + "&Wh10=" + String(p_Whx9) + "&Wh11=" + String(p_Whx10) + "&Wh12=" + String(p_Whx11) + "&MAXamp1=" + String(p_maxamps0) + "&MAXamp2=" + String(p_maxamps1) + "&MAXamp3=" + String(p_maxamps2) + "&MAXamp4=" + String(p_maxamps3) + "&MAXamp5=" + String(p_maxamps4) + "&MAXamp6=" + String(p_maxamps5) + "&MAXamp7=" + String(p_maxamps6) + "&MAXamp8=" + String(p_maxamps7) + "&MAXamp9=" + String(p_maxamps8) + "&MAXamp10=" + String(p_maxamps9) + "&MAXamp11=" + String(p_maxamps10) + "&MAXamp12=" + String(p_maxamps11) + "&pf1=" + String(p_pfx0) + "&pf2=" + String(p_pfx1) + "&pf3=" + String(p_pfx2) + "&pf4=" + String(p_pfx3) + "&pf5=" + String(p_pfx4) + "&pf6=" + String(p_pfx5) + "&pf7=" + String(p_pfx6) + "&pf8=" + String(p_pfx7) + "&pf9=" + String(p_pfx8) + "&pf10=" + String(p_pfx9) + "&pf11=" + String(p_pfx10) + "&pf12=" + String(p_pfx11));
+    }
+    else {
+    Serial.println("Envío bloqueado: Esperando sincronización NTP...");
+    }
 
       if (flag_online == 1)
       {
@@ -2714,11 +2611,9 @@ for (byte j = 0; j < 12; j++)
   delay(100);
   updatecurrentTime();
   // wificheck();
-  if (WiFi.status() == WL_CONNECTED)
-  {
-   send_universal_log("Timestamp_Device=" + String(currentTime) + "&config_id=" + String(caso) + "&XOC_id=" + String(XOCid, 3) + "&counterstatus=" + String(0));
+  
+   ////Aqui antes comparaba si habia WIFI y despues trataba de enviar a universal log. send_universal_log("Timestamp_Device=" + String(currentTime) + "&config_id=" + String(caso) + "&XOC_id=" + String(XOCid, 3) + "&counterstatus=" + String(0));
 
-  }
 } // end setup
 
 void loop()

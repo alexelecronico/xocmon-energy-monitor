@@ -52,18 +52,18 @@ const int atenuacion = 5;           // para reducir ruido cuando las corrientes 
 const float pfcalib = 0;                 //correccion de pf por motivo de capacitancia e inductancia en los sensores
 
 float icalib[]={
-    404.64,//43.1@50A   99.13? Para 50A 94.94. 404.64 para transductor de 100A.  101.31 para 50A
-    404.64, 
-    404.64, 
-    404.64,
-    404.64, //Antes 216.74
-    404.64, //transductor con etiqueta de 5. 
-    404.64,
-    404.64, 
-    404.64,
-    404.64,
-    404.64,
-    404.64,
+    101.31,//43.1@50A   99.13? Para 50A 94.94. 404.64 para transductor de 100A.  101.31 para 50A
+    101.31, 
+    101.31, 
+    101.31,
+    101.31, //Antes 216.74
+    101.31, //transductor con etiqueta de 5. 
+    101.31,
+    101.31, 
+    101.31,
+    101.31,
+    101.31,
+    101.31,
 };
 
 //0 ignore, 1=fase1, 2=fase2, 3=fase3, 4=dont care just read           
