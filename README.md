@@ -1,2 +1,2 @@
 # Gateway ESP 32
-Gateway for collect data from the sensors and send it in the cloud
+Multi-phase energy monitoring system tracking 3 phases and 12 current lines, designed to optimize energy consumption through real-time data visualization.
